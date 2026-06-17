@@ -1,0 +1,107 @@
+"""합성 SAP MB51 export 생성기 (검증 전용).
+
+실제 SAP는 민감 데이터라 리포에 없으므로, BOM DB(data/*.sqlite)의 실제 자재 코드
+체계(1CNY*→2CNY*→3CNY*→4CN*→5CN*)를 그대로 따르는 합성 export를 만들어
+genealogy_tool 의 엣지/추적 로직을 자체 검증한다.
+
+세 가지 엣지 규칙을 모두 의도적으로 한 번씩 발화시키고, 추가로 날짜위반·legacy
+코드·reversal/exclude movement 케이스를 섞어 회귀검증 기반으로 쓴다.
+"""
+from __future__ import annotations
+
+import pandas as pd
+
+# BOM DB에 실재하는 코드 (data/Cenobamate_BOM_DB_v1.sqlite 기준)
+RSM = "1CNY001ZZZZZ"      # Raw Material (tier RSM)
+RSM2 = "1CNY002ZZZZZ"     # 2CNY001 의 또 다른 BOM 입력 (실측 없음 → BOM_EXPECTED 용)
+API = "2CNY001ZZZZZ"      # API
+DP = "3CNY0Z001ZZZ"       # Drug Product
+SP = "4CNS0Z2001ZZ"       # Semi-FP (Blister Strip)
+FP = "5CNT014A1ZZZ"       # FP (Blister Card)
+LEGACY_API = "1CNZ001ZZZZZ"  # legacy → 2CNY001ZZZZZ 매핑 대상
+
+# SAP export 컬럼 (genealogy_tool.REQUIRED_SAP_COLS + 자주 쓰는 OPTIONAL)
+COLUMNS = [
+    "Material Document", "Material Doc.Item", "Material", "Material Description",
+    "Batch", "Plant", "Storage Location", "Movement Type", "Movement Type Text",
+    "Qty in unit of entry", "Unit of Entry", "Posting Date", "Document Date",
+    "Entry Date", "Purchase order", "Item", "Reference", "Supplier", "User Name",
+]
+
+
+def _row(doc, item, mat, batch, sloc, mvt, qty, date,
+         po="", po_item="", ref="", uom="KG", desc=""):
+    return {
+        "Material Document": doc, "Material Doc.Item": item, "Material": mat,
+        "Material Description": desc, "Batch": batch, "Plant": "1100",
+        "Storage Location": sloc, "Movement Type": mvt, "Movement Type Text": "",
+        "Qty in unit of entry": qty, "Unit of Entry": uom, "Posting Date": date,
+        "Document Date": date, "Entry Date": date, "Purchase order": po,
+        "Item": po_item, "Reference": ref, "Supplier": "", "User Name": "tester",
+    }
+
+
+def build_rows() -> list[dict]:
+    r = []
+
+    # --- 케이스 1: PROD (같은 문서 내 543 소비 + 101 산출) → RSM → API ---
+    r += [
+        _row("DOC_PROD1", 1, RSM, "RSM-B1", "1100", 543, -100.0, "2026-01-05"),
+        _row("DOC_PROD1", 2, API, "API-B1", "1104", 101, +50.0, "2026-01-05"),
+    ]
+
+    # --- 케이스 2: REF_PO_ITEM (Reference+PO+Item 동일, 다른 문서, 음수→양수) → API → DP ---
+    # 문서를 다르게 두어 DOC_TRANSFER 와 겹치지 않게 격리
+    r += [
+        _row("DOC_REFA", 1, API, "API-B1", "1104", 311, -50.0, "2026-02-01",
+             po="PO1", po_item="10", ref="REF1"),
+        _row("DOC_REFB", 1, DP, "DP-B1", "3100", 311, +40.0, "2026-02-02",
+             po="PO1", po_item="10", ref="REF1"),
+    ]
+
+    # --- 케이스 3: DOC_TRANSFER (같은 문서, 음수→양수, reference 비움) → DP → SP ---
+    r += [
+        _row("DOC_XFER1", 1, DP, "DP-B1", "3100", 301, -40.0, "2026-03-01"),
+        _row("DOC_XFER1", 2, SP, "SP-B1", "4100", 301, +30.0, "2026-03-02"),
+    ]
+    # --- 케이스 3b: DOC_TRANSFER → SP → FP (체인 완성) ---
+    r += [
+        _row("DOC_XFER2", 1, SP, "SP-B1", "4100", 301, -30.0, "2026-04-01"),
+        _row("DOC_XFER2", 2, FP, "FP-B1", "5100", 301, +20.0, "2026-04-02"),
+    ]
+
+    # --- 케이스 4: 날짜 역전 (from 날짜 > to 날짜) → date_violation=True ---
+    r += [
+        _row("DOC_DATEVIO", 1, DP, "DPV", "3100", 301, -10.0, "2026-05-10"),
+        _row("DOC_DATEVIO", 2, SP, "SPV", "4100", 301, +10.0, "2026-05-01"),
+    ]
+
+    # --- 케이스 5: reversal(102)·exclude(921) movement → 엣지 생성 안 됨 ---
+    r += [
+        _row("DOC_REV", 1, DP, "DP-B1", "3100", 102, -5.0, "2026-06-01"),
+        _row("DOC_REV", 2, SP, "SP-B1", "4100", 102, +5.0, "2026-06-01"),
+        _row("DOC_EXC", 1, FP, "FP-B1", "5100", 921, -2.0, "2026-06-02"),
+    ]
+
+    # --- 케이스 6: legacy API 코드 (1CNZ*) tier 분류 확인용 ---
+    r += [
+        _row("DOC_LEGACY", 1, RSM2, "RSM2-B1", "1100", 543, -10.0, "2026-01-10"),
+        _row("DOC_LEGACY", 2, LEGACY_API, "LAPI-B1", "1104", 101, +5.0, "2026-01-10"),
+    ]
+    return r
+
+
+def write_synthetic_sap(path: str) -> str:
+    """합성 SAP export 를 xlsx(sheet 'Data')로 저장하고 경로를 반환."""
+    df = pd.DataFrame(build_rows(), columns=COLUMNS)
+    with pd.ExcelWriter(path, engine="openpyxl") as w:
+        df.to_excel(w, sheet_name="Data", index=False)
+    return path
+
+
+if __name__ == "__main__":
+    import sys
+    out = sys.argv[1] if len(sys.argv) > 1 else "out/synthetic_sap.xlsx"
+    import os
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    print("wrote", write_synthetic_sap(out))
