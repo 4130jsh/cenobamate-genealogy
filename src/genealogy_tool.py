@@ -205,12 +205,14 @@ class GenealogyTool:
         excluded_movements: Optional[Set[int]] = None,
         split_matching: bool = True,        # A-2
         strict_dates: bool = False,         # C-2
+        pairing_mode: str = "legacy",       # A-3+: 다중 output 페어링 점수식 (legacy|bom-aware)
     ) -> None:
         self.sap_files = list(sap_files)
         self.bom_db = bom_db
         self.include_reversals = include_reversals
         self.split_matching = split_matching
         self.strict_dates = strict_dates
+        self.pairing_mode = pairing_mode if pairing_mode in ("legacy", "bom-aware") else "legacy"
         self.excluded_movements = excluded_movements or set(DEFAULT_EXCLUDE_MOVEMENTS)
         self.ignored_movements = set(self.excluded_movements)
         if not include_reversals:
@@ -552,9 +554,27 @@ class GenealogyTool:
                 chosen = self.choose_output_for_input(input_r, outputs, single)
                 if chosen is None:
                     continue
-                rule = "101/543 single-output" if single else "101/543 scored item-order pairing"
+                if single:
+                    rule = "101/543 single-output"
+                elif self.pairing_mode == "bom-aware":
+                    rule = "101/543 BOM-aware scored pairing"
+                else:
+                    rule = "101/543 scored item-order pairing"
                 edges.append(self.row_to_edge("PROD", input_r, chosen, rule))
         return pd.DataFrame(edges) if edges else self.empty_edges()
+
+    def bom_consistent(self, from_material: str, to_material: str) -> bool:
+        """BOM 마스터가 from_material 을 to_material 의 입력(부품)으로 명시하는지.
+
+        legacy(1CNZ*) ↔ 현행(2CNY*) 코드 차이를 정규화해 비교한다.
+        """
+        to_cur = self.bom.legacy_to_current.get(to_material, to_material)
+        inputs = self.bom.material_to_inputs.get(to_cur, []) or self.bom.material_to_inputs.get(to_material, [])
+        if not inputs:
+            return False
+        from_cur = self.bom.legacy_to_current.get(from_material, from_material)
+        inputs_cur = {self.bom.legacy_to_current.get(i, i) for i in inputs}
+        return from_material in inputs or from_cur in inputs_cur
 
     def choose_output_for_input(self, input_r, output_items, single) -> Optional[dict]:
         cands = [o for o in output_items
@@ -563,14 +583,28 @@ class GenealogyTool:
             return None
         if single:
             return cands[0]
-        # A-3 점수: item 거리 + tier gap(상위일수록 선호) + UoM 불일치 패널티(A-4)
+
+        def _uom_pen(o):
+            return 0 if (clean_str(o["uom"]) == clean_str(input_r["uom"]) or not o["uom"] or not input_r["uom"]) else 1
+
+        if self.pairing_mode == "bom-aware":
+            # A-3+ 점수: BOM 토폴로지 최우선 → tier 인접도 → UoM → 문서 라인 순서(약한 tiebreak)
+            def score(o):
+                bom_pen = 0 if self.bom_consistent(input_r["material"], o["material"]) else 1
+                tier_gap = TIER_ORDER.get(o["tier"], 99) - TIER_ORDER.get(input_r["tier"], 99)
+                tier_pen = 0 if tier_gap == 1 else (1 if tier_gap == 0 else 2)  # 인접 tier 최우선
+                prior_bonus = 0 if o["material_doc_item"] < input_r["material_doc_item"] else 1
+                item_dist = abs(int(o["material_doc_item"]) - int(input_r["material_doc_item"]))
+                return (bom_pen, tier_pen, _uom_pen(o), prior_bonus, item_dist)
+            return sorted(cands, key=score)[0]
+
+        # legacy(기본) 점수: item 거리 + tier gap(상위일수록 선호) + UoM 불일치 패널티(A-4)
         def score(o):
             item_dist = abs(int(o["material_doc_item"]) - int(input_r["material_doc_item"]))
             prior_bonus = 0 if o["material_doc_item"] < input_r["material_doc_item"] else 1  # 직전 output 선호
             tier_gap = TIER_ORDER.get(o["tier"], 99) - TIER_ORDER.get(input_r["tier"], 99)
             tier_pen = 0 if tier_gap >= 1 else 3
-            uom_pen = 0 if (clean_str(o["uom"]) == clean_str(input_r["uom"]) or not o["uom"] or not input_r["uom"]) else 1
-            return (prior_bonus, item_dist, tier_pen, uom_pen)
+            return (prior_bonus, item_dist, tier_pen, _uom_pen(o))
         return sorted(cands, key=score)[0]
 
     # A-1: REF 그룹키 빈 값 신뢰도 강등
@@ -1203,6 +1237,8 @@ def parse_args(argv=None):
     p.add_argument("--exclude-movements", default="921,925")
     p.add_argument("--no-split-matching", action="store_true", help="1:1 매칭만(하위호환)")
     p.add_argument("--strict-dates", action="store_true", help="날짜 역전 엣지 제외")
+    p.add_argument("--pairing-mode", choices=["legacy", "bom-aware"], default="legacy",
+                   help="다중 output 생산 페어링 점수식 (legacy=기본/하위호환, bom-aware=BOM 토폴로지 우선)")
     p.add_argument("--batch-list", help="배치 목록 파일(줄당 'batch' 또는 'batch,material') 일괄 추적")
     p.add_argument("--trace-scope", choices=["all-fp", "all-leaf", "all"], help="시드 자동 선택 일괄 추적")
     p.add_argument("--html", action="store_true", help="genealogy HTML 시각화 생성")
@@ -1214,7 +1250,7 @@ def main(argv=None) -> int:
     excluded = {parse_int(x) for x in args.exclude_movements.split(",") if clean_str(x)}
     tool = GenealogyTool(sap_files=args.sap, bom_db=args.bom_db, include_reversals=args.include_reversals,
                          excluded_movements=excluded, split_matching=not args.no_split_matching,
-                         strict_dates=args.strict_dates)
+                         strict_dates=args.strict_dates, pairing_mode=args.pairing_mode)
     trace_edges = trace_nodes = trace_usage = bom_expected = meta = None
     Path(args.out).mkdir(parents=True, exist_ok=True)
 

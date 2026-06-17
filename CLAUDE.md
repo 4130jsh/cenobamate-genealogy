@@ -77,14 +77,16 @@ python src/genealogy_tool.py --sap <SAP.xlsx> --bom-db data/Cenobamate_BOM_DB_v1
 ```
 
 주요 플래그: `--direction upstream|downstream|both`, `--max-depth N`, `--strict-dates`,
-`--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`
+`--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`,
+`--pairing-mode legacy|bom-aware`(다중 output 생산 페어링 점수식; 기본 legacy/하위호환)
 
 ## 검증 방법 (코드 수정 후 반드시)
 
 실제 SAP export는 리포에 없습니다(민감 데이터). 코드 수정 시:
 1. 구문 점검: `python -c "import ast; ast.parse(open('src/genealogy_tool.py').read())"`
 2. BOM DB 로딩 검증: DB로 `load_bom_master`가 정상 동작하는지
-3. 합성 데이터로 단위검증 (과거 `docs/history/`의 검증 케이스 참고)
+3. 스모크/회귀 테스트: `python tests/test_smoke.py` (합성 SAP fixture `tests/synth_sap.py`로
+   엣지 3규칙·날짜위반·strict-dates·tier분류·상류추적·BOM_EXPECTED분리·다중output페어링 검증)
 4. 회귀: tier 분류·생산 페어링·분할매칭·잔차·날짜위반이 유지되는지
 
 ## 알려진 제약

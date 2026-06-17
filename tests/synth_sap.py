@@ -88,6 +88,19 @@ def build_rows() -> list[dict]:
         _row("DOC_LEGACY", 1, RSM2, "RSM2-B1", "1100", 543, -10.0, "2026-01-10"),
         _row("DOC_LEGACY", 2, LEGACY_API, "LAPI-B1", "1104", 101, +5.0, "2026-01-10"),
     ]
+
+    # --- 케이스 7: 다중 output 생산 페어링 (choose_output_for_input 점수식 검증) ---
+    # 한 문서에 RSM 2종 소비 + API 2종 산출. tier/UoM 동일하므로 BOM 토폴로지만이
+    # 유일한 식별자다. item 순서상 naive(legacy)는 RSM-M1→API-M2 로 오결합하지만,
+    # BOM(1CNY001→2CNY001, 1CNY002→2CNY002)을 보면 정답은 교차가 아닌 직결이다.
+    #   BOM: 2CNY001ZZZZZ.in = 1CNY001ZZZZZ / 1CNY002ZZZZZ ...
+    #        2CNY005ZZZZZ.in = 2CNY002ZZZZZ  (서로 다른 입력)
+    r += [
+        _row("DOC_MULTI", 1, RSM, "RSM-M1", "1100", 543, -100.0, "2026-07-01"),   # →2CNY001
+        _row("DOC_MULTI", 2, "2CNY002ZZZZZ", "API2-M2", "1104", 101, +40.0, "2026-07-01"),
+        _row("DOC_MULTI", 3, "1CNY002ZZZZZ", "RSM-M2", "1100", 543, -80.0, "2026-07-01"),  # 2CNY002.in
+        _row("DOC_MULTI", 4, API, "API1-M1", "1104", 101, +50.0, "2026-07-01"),    # 2CNY001
+    ]
     return r
 
 

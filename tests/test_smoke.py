@@ -23,11 +23,12 @@ from synth_sap import write_synthetic_sap  # noqa: E402
 BOM_DB = os.path.join(ROOT, "data", "Cenobamate_BOM_DB_v1.sqlite")
 
 
-def _build(strict_dates=False):
+def _build(strict_dates=False, pairing_mode="legacy"):
     tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
     tmp.close()
     write_synthetic_sap(tmp.name)
-    tool = gt.GenealogyTool(sap_files=[tmp.name], bom_db=BOM_DB, strict_dates=strict_dates)
+    tool = gt.GenealogyTool(sap_files=[tmp.name], bom_db=BOM_DB,
+                            strict_dates=strict_dates, pairing_mode=pairing_mode)
     return tool, tmp.name
 
 
@@ -122,6 +123,34 @@ def test_bom_expected_separated_from_actual():
     # 실측이 존재하는 상류(1CNY001ZZZZZ)는 BOM_EXPECTED 에 들어오면 안 됨
     assert "1CNY001ZZZZZ" not in set(bom_expected["from_material_expected"]), \
         "실측 있는 상류가 BOM_EXPECTED 로 잘못 분류됨"
+
+
+def test_multi_output_legacy_mispairs():
+    # legacy 점수식은 item 거리로 RSM-M1 을 잘못된 API2-M2 에 붙인다 (회귀 기록용)
+    tool, _ = _build(pairing_mode="legacy")
+    assert _has_edge(tool, "PROD", "RSM-M1", "API2-M2"), \
+        "legacy 모드의 기존(오결합) 동작이 바뀜 — 점수식 회귀 의심"
+    assert not _has_edge(tool, "PROD", "RSM-M1", "API1-M1"), \
+        "legacy 모드가 예상과 다르게 정답을 골랐음(기준 케이스 점검 필요)"
+
+
+def test_multi_output_bom_aware_correct():
+    # bom-aware 점수식은 BOM(1CNY001→2CNY001)을 보고 RSM-M1→API1-M1 로 올바르게 붙인다
+    tool, _ = _build(pairing_mode="bom-aware")
+    assert _has_edge(tool, "PROD", "RSM-M1", "API1-M1"), \
+        "bom-aware: RSM-M1→API1-M1(정답) 미생성"
+    assert not _has_edge(tool, "PROD", "RSM-M1", "API2-M2"), \
+        "bom-aware 인데도 RSM-M1 이 잘못된 API2-M2 에 붙음"
+    assert _has_edge(tool, "PROD", "RSM-M2", "API2-M2"), \
+        "bom-aware: RSM-M2→API2-M2 미생성"
+
+
+def test_legacy_default_unchanged():
+    # 기본값(legacy)에서 핵심 체인이 그대로 유지되는지 (하위호환)
+    tool, _ = _build()
+    assert tool.pairing_mode == "legacy", "기본 pairing_mode 가 legacy 가 아님"
+    for k in ("PROD", "REF_PO_ITEM", "DOC_TRANSFER"):
+        assert _kinds(tool).get(k, 0) >= 1, f"legacy 기본에서 {k} 누락"
 
 
 # ----------------------------------------------------------------------
