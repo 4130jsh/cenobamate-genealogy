@@ -7,6 +7,8 @@ genealogy_out/
 EXPORT_*.xlsx
 *MB51*.xlsx
 *mb51*.xlsx
+# SAP 파일 전용 폴더 (이름 무관 통째로 제외)
+data/sap/
 
 # Python
 __pycache__/

@@ -1,0 +1,13 @@
+{
+  // .venv 를 만들면 자동으로 잡히도록 (python -m venv .venv)
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.terminal.activateEnvironment": true,
+  // data/sap 의 SAP 파일은 탐색기/검색에서 숨김 (실수 커밋·노출 방지)
+  "files.exclude": {
+    "**/__pycache__": true
+  },
+  "search.exclude": {
+    "data/sap/**": true,
+    "out/**": true
+  }
+}

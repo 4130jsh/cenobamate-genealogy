@@ -1,0 +1,69 @@
+{
+  // Cenobamate genealogy_tool 로컬 디버그 구성
+  // SAP는 data/sap/ 에 두고(F5) 실행하세요. 이 폴더는 .gitignore로 커밋 제외됩니다.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "genealogy: 빌드만 (build only)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/genealogy_tool.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "args": [
+        "--sap", "${input:sapPath}",
+        "--bom-db", "data/Cenobamate_BOM_DB_v1.sqlite",
+        "--out", "out"
+      ]
+    },
+    {
+      "name": "genealogy: 단건 추적 (batch trace, 상류)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/genealogy_tool.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "args": [
+        "--sap", "${input:sapPath}",
+        "--bom-db", "data/Cenobamate_BOM_DB_v1.sqlite",
+        "--batch", "${input:batch}",
+        "--direction", "upstream",
+        "--html",
+        "--out", "out"
+      ]
+    },
+    {
+      "name": "genealogy: 전 완제품 일괄 (all-fp, 상류)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/genealogy_tool.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false,
+      "args": [
+        "--sap", "${input:sapPath}",
+        "--bom-db", "data/Cenobamate_BOM_DB_v1.sqlite",
+        "--trace-scope", "all-fp",
+        "--direction", "upstream",
+        "--html",
+        "--export-xlsx",
+        "--out", "out"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "sapPath",
+      "type": "promptString",
+      "description": "SAP MB51 export 경로",
+      "default": "data/sap/EXPORT_MB51.xlsx"
+    },
+    {
+      "id": "batch",
+      "type": "promptString",
+      "description": "추적할 배치 번호"
+    }
+  ]
+}
