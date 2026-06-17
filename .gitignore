@@ -1,0 +1,20 @@
+# 출력
+out/
+genealogy_out/
+*.png
+
+# SAP export (민감 데이터 — 커밋 금지)
+EXPORT_*.xlsx
+*MB51*.xlsx
+*mb51*.xlsx
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
