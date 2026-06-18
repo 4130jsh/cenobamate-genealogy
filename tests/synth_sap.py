@@ -101,6 +101,14 @@ def build_rows() -> list[dict]:
         _row("DOC_MULTI", 3, "1CNY002ZZZZZ", "RSM-M2", "1100", 543, -80.0, "2026-07-01"),  # 2CNY002.in
         _row("DOC_MULTI", 4, API, "API1-M1", "1104", 101, +50.0, "2026-07-01"),    # 2CNY001
     ]
+
+    # --- 케이스 8: 같은 tier·다른 strength 간 가짜 전환 (transfer 페어링 차단 검증) ---
+    # 4CNS0Z2001ZZ 와 4CNS1Z2001ZZ 는 둘 다 SP 지만 strength(0 vs 1)가 달라 서로 전환 불가.
+    # BOM 상 입력관계도 없음(각각 3CNY0/3CNY1 에서 옴) → DOC_TRANSFER 로 페어링되면 안 됨.
+    r += [
+        _row("DOC_BADSTRENGTH", 1, "4CNS0Z2001ZZ", "SPX0", "4100", 301, -10.0, "2026-08-01"),
+        _row("DOC_BADSTRENGTH", 2, "4CNS1Z2001ZZ", "SPX1", "4100", 301, +10.0, "2026-08-01"),
+    ]
     return r
 
 

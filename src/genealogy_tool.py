@@ -214,6 +214,7 @@ class GenealogyTool:
         pairing_mode: str = "bom-aware",    # A-3+: 다중 output 페어링 점수식 (bom-aware 기본, legacy 하위호환)
         from_store: Optional[str] = None,   # Phase 2: 누적 store 에서 행을 읽어 빌드
         build: bool = True,                 # Phase 2: 적재 전용 시 엣지 빌드 생략
+        legacy_transfer_pairing: bool = False,  # transfer 같은-tier 다른-material 가짜전환 차단(기본 on)
     ) -> None:
         self.sap_files = list(sap_files) if sap_files else []
         self.bom_db = bom_db
@@ -221,6 +222,7 @@ class GenealogyTool:
         self.include_reversals = include_reversals
         self.split_matching = split_matching
         self.strict_dates = strict_dates
+        self.legacy_transfer_pairing = legacy_transfer_pairing
         self.pairing_mode = pairing_mode if pairing_mode in ("legacy", "bom-aware") else "bom-aware"
         self.excluded_movements = excluded_movements or set(DEFAULT_EXCLUDE_MOVEMENTS)
         self.ignored_movements = set(self.excluded_movements)
@@ -798,8 +800,7 @@ class GenealogyTool:
                 "material_doc": r["material_doc"], "reference": r["reference"],
                 "purchase_order": r["purchase_order"], "po_item": r["po_item"], "source_file": r["source_file"]}
 
-    @staticmethod
-    def is_valid_transfer_candidate(nrow, prow) -> bool:
+    def is_valid_transfer_candidate(self, nrow, prow) -> bool:
         if nrow["node"] == prow["node"] and nrow["plant"] == prow["plant"] and nrow["sloc"] == prow["sloc"]:
             return False
         changed = (nrow["batch"] != prow["batch"] or nrow["material"] != prow["material"]
@@ -808,8 +809,15 @@ class GenealogyTool:
             return False
         nt = TIER_ORDER.get(nrow["tier"], 99); pt = TIER_ORDER.get(prow["tier"], 99)
         if nrow["material"] == prow["material"]:
-            return True
-        if abs(nt - pt) <= 1:
+            return True                          # 같은 material = 위치/배치 재고 이동
+        if self.legacy_transfer_pairing:
+            return abs(nt - pt) <= 1             # 구 동작(하위호환): tier 1 이내면 허용
+        # 다른 material: 같은 tier 의 strength 변경 등 불가능 전환을 차단.
+        #   같은 tier → BOM 이 입력관계를 인정할 때만 허용(사실상 strength 교차 차단)
+        #   인접 tier → BOM 정합이면 허용, 아니면(데이터 한계) 보수적으로 허용 유지
+        if nt == pt:
+            return self.bom_consistent(nrow["material"], prow["material"])
+        if abs(nt - pt) == 1:
             return True
         return False
 
@@ -1386,6 +1394,8 @@ def parse_args(argv=None):
     p.add_argument("--strict-dates", action="store_true", help="날짜 역전 엣지 제외")
     p.add_argument("--pairing-mode", choices=["legacy", "bom-aware"], default="bom-aware",
                    help="다중 output 생산 페어링 점수식 (bom-aware=기본/BOM 토폴로지 우선, legacy=하위호환/구 item-순서)")
+    p.add_argument("--legacy-transfer-pairing", action="store_true",
+                   help="구 transfer 페어링 복원(같은 tier 다른 strength 간 가짜 전환 엣지 허용). 기본은 차단")
     p.add_argument("--write-db", metavar="PATH",
                    help="genealogy 결과(nodes/edges/bom_expected)를 결과 sqlite 로 적재 (frontend/누적 조회용)")
     p.add_argument("--db-run-id", help="결과 DB 적재 시 run_id 지정(미지정 시 타임스탬프)")
@@ -1422,7 +1432,8 @@ def main(argv=None) -> int:
     if args.ingest:
         ing = GenealogyTool(sap_files=args.sap, bom_db=args.bom_db, include_reversals=args.include_reversals,
                             excluded_movements=excluded, split_matching=not args.no_split_matching,
-                            strict_dates=args.strict_dates, pairing_mode=args.pairing_mode, build=False)
+                            strict_dates=args.strict_dates, pairing_mode=args.pairing_mode,
+                         legacy_transfer_pairing=args.legacy_transfer_pairing, build=False)
         stats = ing.ingest_to_store(args.store)
         print("\n=== Ingest Summary ===")
         print(f"batch={stats['ingest_batch_id']}  in={stats['rows_in_batch']:,}  "
@@ -1435,6 +1446,7 @@ def main(argv=None) -> int:
     tool = GenealogyTool(sap_files=args.sap, bom_db=args.bom_db, include_reversals=args.include_reversals,
                          excluded_movements=excluded, split_matching=not args.no_split_matching,
                          strict_dates=args.strict_dates, pairing_mode=args.pairing_mode,
+                         legacy_transfer_pairing=args.legacy_transfer_pairing,
                          from_store=args.store if args.from_store else None)
     trace_edges = trace_nodes = trace_usage = bom_expected = meta = None
     Path(args.out).mkdir(parents=True, exist_ok=True)

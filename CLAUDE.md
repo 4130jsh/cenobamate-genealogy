@@ -101,7 +101,8 @@ streamlit run frontend/app.py   # 사이드바에서 warehouse 경로 지정 (�
 주요 플래그: `--direction upstream|downstream|both`, `--max-depth N`, `--strict-dates`,
 `--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`,
 `--pairing-mode bom-aware|legacy`(다중 output 생산 페어링 점수식; 기본 bom-aware=BOM 토폴로지 우선, legacy=구 item-순서 하위호환),
-`--store PATH`·`--ingest`·`--from-store`(Phase 2 누적 store), `--write-db PATH`·`--db-replace`(결과 DB화)
+`--store PATH`·`--ingest`·`--from-store`(Phase 2 누적 store), `--write-db PATH`·`--db-replace`(결과 DB화),
+`--legacy-transfer-pairing`(구 transfer 페어링 복원; 기본은 같은 tier 다른 strength 가짜 전환 차단)
 
 ## 검증 방법 (코드 수정 후 반드시)
 

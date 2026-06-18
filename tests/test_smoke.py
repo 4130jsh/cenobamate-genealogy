@@ -84,6 +84,31 @@ def test_strict_dates_drops_violation():
     assert any("strict-dates" in w for w in tool.build_warnings), "strict-dates 경고 누락"
 
 
+def test_same_tier_cross_strength_blocked():
+    # 기본: 같은 tier·다른 strength(4CNS0↔4CNS1) 간 가짜 전환 엣지가 생기면 안 됨
+    tool, _ = _build()
+    e = tool.edges
+    bad = e[e["material_doc"] == "DOC_BADSTRENGTH"]
+    assert bad.empty, f"같은 tier 다른 strength 가짜 전환 엣지가 생성됨: {list(zip(bad.from_batch, bad.to_batch))}"
+
+
+def test_legacy_transfer_pairing_restores_old():
+    # 하위호환 플래그로 구 동작(가짜 전환 허용) 복원 가능해야 함
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False); tmp.close()
+    write_synthetic_sap(tmp.name)
+    tool = gt.GenealogyTool(sap_files=[tmp.name], bom_db=BOM_DB, legacy_transfer_pairing=True)
+    e = tool.edges
+    assert not e[e["material_doc"] == "DOC_BADSTRENGTH"].empty, \
+        "legacy-transfer-pairing 인데도 같은 tier 전환 엣지가 복원되지 않음"
+
+
+def test_legit_cross_tier_transfer_kept():
+    # BOM 이 인정하는 인접 tier 전환(DP→SP, SP→FP)은 그대로 유지돼야 함(과차단 방지)
+    tool, _ = _build()
+    assert _has_edge(tool, "DOC_TRANSFER", "DP-B1", "SP-B1"), "정상 DP→SP 전환이 사라짐"
+    assert _has_edge(tool, "DOC_TRANSFER", "SP-B1", "FP-B1"), "정상 SP→FP 전환이 사라짐"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함
