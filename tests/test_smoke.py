@@ -23,12 +23,12 @@ from synth_sap import write_synthetic_sap  # noqa: E402
 BOM_DB = os.path.join(ROOT, "data", "Cenobamate_BOM_DB_v1.sqlite")
 
 
-def _build(strict_dates=False, pairing_mode="legacy"):
+def _build(strict_dates=False, pairing_mode=None):
     tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
     tmp.close()
     write_synthetic_sap(tmp.name)
-    tool = gt.GenealogyTool(sap_files=[tmp.name], bom_db=BOM_DB,
-                            strict_dates=strict_dates, pairing_mode=pairing_mode)
+    kw = {} if pairing_mode is None else {"pairing_mode": pairing_mode}  # None=도구 기본값 사용
+    tool = gt.GenealogyTool(sap_files=[tmp.name], bom_db=BOM_DB, strict_dates=strict_dates, **kw)
     return tool, tmp.name
 
 
@@ -145,12 +145,21 @@ def test_multi_output_bom_aware_correct():
         "bom-aware: RSM-M2→API2-M2 미생성"
 
 
-def test_legacy_default_unchanged():
-    # 기본값(legacy)에서 핵심 체인이 그대로 유지되는지 (하위호환)
+def test_default_is_bom_aware():
+    # 기본값은 bom-aware 로 승격됨 — 다중 output 페어링이 BOM 토폴로지대로 붙어야 함
     tool, _ = _build()
-    assert tool.pairing_mode == "legacy", "기본 pairing_mode 가 legacy 가 아님"
+    assert tool.pairing_mode == "bom-aware", "기본 pairing_mode 가 bom-aware 가 아님"
     for k in ("PROD", "REF_PO_ITEM", "DOC_TRANSFER"):
-        assert _kinds(tool).get(k, 0) >= 1, f"legacy 기본에서 {k} 누락"
+        assert _kinds(tool).get(k, 0) >= 1, f"기본(bom-aware)에서 {k} 누락"
+    assert _has_edge(tool, "PROD", "RSM-M1", "API1-M1"), "기본 bom-aware 가 RSM-M1 을 정답에 붙이지 않음"
+
+
+def test_legacy_mode_still_available():
+    # 하위호환: --pairing-mode legacy 로 구 동작을 그대로 재현할 수 있어야 함
+    tool, _ = _build(pairing_mode="legacy")
+    assert tool.pairing_mode == "legacy"
+    for k in ("PROD", "REF_PO_ITEM", "DOC_TRANSFER"):
+        assert _kinds(tool).get(k, 0) >= 1, f"legacy 모드에서 {k} 누락"
 
 
 # ----------------------------------------------------------------------

@@ -78,7 +78,7 @@ python src/genealogy_tool.py --sap <SAP.xlsx> --bom-db data/Cenobamate_BOM_DB_v1
 
 주요 플래그: `--direction upstream|downstream|both`, `--max-depth N`, `--strict-dates`,
 `--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`,
-`--pairing-mode legacy|bom-aware`(다중 output 생산 페어링 점수식; 기본 legacy/하위호환)
+`--pairing-mode bom-aware|legacy`(다중 output 생산 페어링 점수식; 기본 bom-aware=BOM 토폴로지 우선, legacy=구 item-순서 하위호환)
 
 ## 검증 방법 (코드 수정 후 반드시)
 

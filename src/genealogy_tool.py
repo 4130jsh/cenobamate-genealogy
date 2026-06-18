@@ -205,14 +205,14 @@ class GenealogyTool:
         excluded_movements: Optional[Set[int]] = None,
         split_matching: bool = True,        # A-2
         strict_dates: bool = False,         # C-2
-        pairing_mode: str = "legacy",       # A-3+: 다중 output 페어링 점수식 (legacy|bom-aware)
+        pairing_mode: str = "bom-aware",    # A-3+: 다중 output 페어링 점수식 (bom-aware 기본, legacy 하위호환)
     ) -> None:
         self.sap_files = list(sap_files)
         self.bom_db = bom_db
         self.include_reversals = include_reversals
         self.split_matching = split_matching
         self.strict_dates = strict_dates
-        self.pairing_mode = pairing_mode if pairing_mode in ("legacy", "bom-aware") else "legacy"
+        self.pairing_mode = pairing_mode if pairing_mode in ("legacy", "bom-aware") else "bom-aware"
         self.excluded_movements = excluded_movements or set(DEFAULT_EXCLUDE_MOVEMENTS)
         self.ignored_movements = set(self.excluded_movements)
         if not include_reversals:
@@ -1237,8 +1237,8 @@ def parse_args(argv=None):
     p.add_argument("--exclude-movements", default="921,925")
     p.add_argument("--no-split-matching", action="store_true", help="1:1 매칭만(하위호환)")
     p.add_argument("--strict-dates", action="store_true", help="날짜 역전 엣지 제외")
-    p.add_argument("--pairing-mode", choices=["legacy", "bom-aware"], default="legacy",
-                   help="다중 output 생산 페어링 점수식 (legacy=기본/하위호환, bom-aware=BOM 토폴로지 우선)")
+    p.add_argument("--pairing-mode", choices=["legacy", "bom-aware"], default="bom-aware",
+                   help="다중 output 생산 페어링 점수식 (bom-aware=기본/BOM 토폴로지 우선, legacy=하위호환/구 item-순서)")
     p.add_argument("--batch-list", help="배치 목록 파일(줄당 'batch' 또는 'batch,material') 일괄 추적")
     p.add_argument("--trace-scope", choices=["all-fp", "all-leaf", "all"], help="시드 자동 선택 일괄 추적")
     p.add_argument("--html", action="store_true", help="genealogy HTML 시각화 생성")
