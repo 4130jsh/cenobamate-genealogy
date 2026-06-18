@@ -408,7 +408,7 @@ class GenealogyTool:
         자연키(NATURAL_KEY_COLS) UNIQUE 인덱스 + INSERT OR IGNORE 로, 같은 export 를
         재적재해도 중복이 쌓이지 않는다. provenance(원본 파일·적재시각)는 행에 보존.
         """
-        ingest_batch_id = ingest_batch_id or datetime.datetime.now().strftime("ing_%Y%m%dT%H%M%S")
+        ingest_batch_id = ingest_batch_id or datetime.datetime.now().strftime("ing_%Y%m%dT%H%M%S_%f")
         ingested_at = datetime.datetime.now().isoformat(timespec="seconds")
         df = self.rows.drop(columns=["row_id"], errors="ignore").copy()
         df["ingest_batch_id"] = ingest_batch_id
@@ -1162,7 +1162,7 @@ class GenealogyTool:
         - replace=True: 기존 결과를 비우고 이번 빌드만 남김
         build_runs 레지스트리와 최신 스냅샷 뷰(v_latest_*)도 함께 관리한다.
         """
-        run_id = run_id or datetime.datetime.now().strftime("run_%Y%m%dT%H%M%S")
+        run_id = run_id or datetime.datetime.now().strftime("run_%Y%m%dT%H%M%S_%f")
         built_at = datetime.datetime.now().isoformat(timespec="seconds")
         date_violations = int(self.edges["date_violation"].sum()) if not self.edges.empty else 0
 

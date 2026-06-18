@@ -2,8 +2,10 @@
 out/
 genealogy_out/
 *.png
-# genealogy 결과 DB (실배치 계보 — 커밋 금지, BOM 마스터 DB는 data/ 에 별도 유지)
+# genealogy 결과/누적 DB (실배치 계보 — 커밋 금지, BOM 마스터 DB는 data/ 에 별도 유지)
 genealogy_results*.sqlite
+*warehouse*.sqlite
+warehouse.sqlite
 
 # SAP export (민감 데이터 — 커밋 금지)
 EXPORT_*.xlsx
