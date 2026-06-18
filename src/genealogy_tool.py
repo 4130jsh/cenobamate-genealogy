@@ -33,6 +33,7 @@ python cenobamate_genealogy_tool_v2.py \
 from __future__ import annotations
 
 import argparse
+import datetime
 import glob
 import html
 import json
@@ -1067,6 +1068,65 @@ class GenealogyTool:
             outputs["genealogy_output.xlsx"] = xlsx_path
         return outputs
 
+    # ----------------------------------------------------------
+    # Phase 1: genealogy 결과 DB화 (frontend/누적 조회용)
+    # 기존 CSV/XLSX 출력과 독립. sqlite 표준 스키마(향후 Postgres 이전 가능).
+    # ----------------------------------------------------------
+    def write_results_db(self, db_path: str, run_id: Optional[str] = None,
+                         replace: bool = False) -> str:
+        """nodes/edges/bom_expected_master 를 결과 sqlite 로 적재하고 run_id 반환.
+
+        - replace=False(기본): run_id 를 붙여 append (빌드 이력 누적)
+        - replace=True: 기존 결과를 비우고 이번 빌드만 남김
+        build_runs 레지스트리와 최신 스냅샷 뷰(v_latest_*)도 함께 관리한다.
+        """
+        run_id = run_id or datetime.datetime.now().strftime("run_%Y%m%dT%H%M%S")
+        built_at = datetime.datetime.now().isoformat(timespec="seconds")
+        date_violations = int(self.edges["date_violation"].sum()) if not self.edges.empty else 0
+
+        def _stamp(df: pd.DataFrame) -> pd.DataFrame:
+            out = df.copy()
+            out.insert(0, "run_id", run_id)
+            return out
+
+        Path(os.path.dirname(db_path) or ".").mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(db_path)
+        try:
+            cur = con.cursor()
+            cur.execute("""CREATE TABLE IF NOT EXISTS build_runs (
+                run_id TEXT PRIMARY KEY, built_at TEXT, sap_files TEXT, bom_db TEXT,
+                pairing_mode TEXT, sap_rows INTEGER, edge_count INTEGER, node_count INTEGER,
+                date_violations INTEGER, scope_note TEXT)""")
+            mode = "replace" if replace else "append"
+            if replace:
+                cur.execute("DELETE FROM build_runs")
+            _stamp(self.nodes).to_sql("gen_nodes", con, if_exists=mode, index=False)
+            _stamp(self.edges).to_sql("gen_edges", con, if_exists=mode, index=False)
+            _stamp(self.bom.bom_edges).to_sql("gen_bom_expected", con, if_exists=mode, index=False)
+            cur.execute("INSERT OR REPLACE INTO build_runs VALUES (?,?,?,?,?,?,?,?,?,?)", (
+                run_id, built_at, json.dumps(self.sap_files, ensure_ascii=False), self.bom_db,
+                self.pairing_mode, len(self.rows), len(self.edges), len(self.nodes),
+                date_violations, self.scope_note))
+            # 최신 빌드 스냅샷 뷰 (frontend 기본 조회 대상)
+            cur.executescript("""
+                DROP VIEW IF EXISTS v_latest_run;
+                CREATE VIEW v_latest_run AS
+                    SELECT run_id FROM build_runs ORDER BY built_at DESC, run_id DESC LIMIT 1;
+                DROP VIEW IF EXISTS v_latest_edges;
+                CREATE VIEW v_latest_edges AS
+                    SELECT e.* FROM gen_edges e WHERE e.run_id IN (SELECT run_id FROM v_latest_run);
+                DROP VIEW IF EXISTS v_latest_nodes;
+                CREATE VIEW v_latest_nodes AS
+                    SELECT n.* FROM gen_nodes n WHERE n.run_id IN (SELECT run_id FROM v_latest_run);
+                DROP VIEW IF EXISTS v_latest_bom_expected;
+                CREATE VIEW v_latest_bom_expected AS
+                    SELECT b.* FROM gen_bom_expected b WHERE b.run_id IN (SELECT run_id FROM v_latest_run);
+            """)
+            con.commit()
+        finally:
+            con.close()
+        return run_id
+
 
 def render_html(trace_edges: pd.DataFrame, trace_nodes: pd.DataFrame, bom_expected: pd.DataFrame,
                 meta: dict, title: str, out_path: str) -> str:
@@ -1239,6 +1299,11 @@ def parse_args(argv=None):
     p.add_argument("--strict-dates", action="store_true", help="날짜 역전 엣지 제외")
     p.add_argument("--pairing-mode", choices=["legacy", "bom-aware"], default="bom-aware",
                    help="다중 output 생산 페어링 점수식 (bom-aware=기본/BOM 토폴로지 우선, legacy=하위호환/구 item-순서)")
+    p.add_argument("--write-db", metavar="PATH",
+                   help="genealogy 결과(nodes/edges/bom_expected)를 결과 sqlite 로 적재 (frontend/누적 조회용)")
+    p.add_argument("--db-run-id", help="결과 DB 적재 시 run_id 지정(미지정 시 타임스탬프)")
+    p.add_argument("--db-replace", action="store_true",
+                   help="결과 DB 의 기존 빌드를 비우고 이번 빌드만 남김(기본: append 누적)")
     p.add_argument("--batch-list", help="배치 목록 파일(줄당 'batch' 또는 'batch,material') 일괄 추적")
     p.add_argument("--trace-scope", choices=["all-fp", "all-leaf", "all"], help="시드 자동 선택 일괄 추적")
     p.add_argument("--html", action="store_true", help="genealogy HTML 시각화 생성")
@@ -1302,6 +1367,9 @@ def main(argv=None) -> int:
             print(f"HTML: {hp}")
 
     outputs = tool.export_all(args.out, trace_edges, trace_nodes, trace_usage, bom_expected, meta, args.export_xlsx)
+    if args.write_db:
+        run_id = tool.write_results_db(args.write_db, run_id=args.db_run_id, replace=args.db_replace)
+        outputs[f"results_db ({run_id})"] = args.write_db
     print_summary(tool, meta)
     print("\n=== Output files ===")
     for name, path in outputs.items():

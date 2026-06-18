@@ -162,6 +162,60 @@ def test_legacy_mode_still_available():
         assert _kinds(tool).get(k, 0) >= 1, f"legacy 모드에서 {k} 누락"
 
 
+def test_write_results_db():
+    import sqlite3
+    tool, _ = _build()
+    dbf = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+    dbf.close()
+    run_id = tool.write_results_db(dbf.name, run_id="run_test")
+    assert run_id == "run_test"
+    con = sqlite3.connect(dbf.name)
+    try:
+        cur = con.cursor()
+        # build_runs 레지스트리에 1건
+        (n_runs,) = cur.execute("SELECT COUNT(*) FROM build_runs").fetchone()
+        assert n_runs == 1, "build_runs 에 빌드 기록이 없음"
+        # 메타 일치
+        ec, nc, pm = cur.execute(
+            "SELECT edge_count, node_count, pairing_mode FROM build_runs WHERE run_id='run_test'").fetchone()
+        assert ec == len(tool.edges) and nc == len(tool.nodes), "edge/node 카운트 불일치"
+        assert pm == "bom-aware", "pairing_mode 메타 누락"
+        # 최신 스냅샷 뷰로 PROD 핵심 엣지 조회 가능
+        rows = cur.execute(
+            "SELECT 1 FROM v_latest_edges WHERE edge_kind='PROD' AND from_batch='RSM-M1' AND to_batch='API1-M1'"
+        ).fetchall()
+        assert rows, "v_latest_edges 에서 기대 PROD 엣지를 못 찾음"
+    finally:
+        con.close()
+
+
+def test_write_results_db_append_then_replace():
+    import sqlite3
+    tool, _ = _build()
+    dbf = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+    dbf.close()
+    tool.write_results_db(dbf.name, run_id="run_a")
+    tool.write_results_db(dbf.name, run_id="run_b")  # append → 2건
+    con = sqlite3.connect(dbf.name)
+    try:
+        (n,) = con.execute("SELECT COUNT(*) FROM build_runs").fetchone()
+        assert n == 2, "append 모드인데 빌드가 누적되지 않음"
+        # 최신 뷰는 가장 최근(run_b)만
+        latest = con.execute("SELECT run_id FROM v_latest_run").fetchone()[0]
+        assert latest == "run_b", f"최신 run 이 run_b 가 아님: {latest}"
+    finally:
+        con.close()
+    # replace 모드 → 1건만 남음
+    tool.write_results_db(dbf.name, run_id="run_c", replace=True)
+    con = sqlite3.connect(dbf.name)
+    try:
+        (n,) = con.execute("SELECT COUNT(*) FROM build_runs").fetchone()
+        assert n == 1, "replace 모드인데 기존 빌드가 남아있음"
+        assert con.execute("SELECT run_id FROM v_latest_run").fetchone()[0] == "run_c"
+    finally:
+        con.close()
+
+
 # ----------------------------------------------------------------------
 # 단독 실행 러너 (pytest 없이)
 # ----------------------------------------------------------------------
