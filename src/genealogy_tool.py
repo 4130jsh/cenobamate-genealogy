@@ -552,20 +552,22 @@ class GenealogyTool:
     # reversal 넷팅: 취소된 원본 문서 무효화
     # ----------------------------------------------------------
     def void_reversed_documents(self, rows: pd.DataFrame) -> pd.DataFrame:
-        """reversal(102/544/…) 과 매칭되는 원본 movement 의 문서를 통째로 무효화.
+        """reversal 로 '완전히 취소된' 생산 문서만 무효화(엣지 입력에서 제외).
 
         SAP 에 잘못 작성됐다가 취소된 거래는 '원본(101/543)'과 '취소(102/544)'가
         모두 남는다. 기본 빌드는 취소 movement 만 제외해 원본이 살아남아 가짜 엣지를
         만든다. 여기서 reversal 을 (원본 movement·material·batch·plant·sloc·PO·|수량|)
-        로 원본에 매칭해, 그 원본이 속한 material document 전체를 엣지 입력에서 제외한다.
+        로 원본에 매칭하되, **문서의 모든 생산 movement(101/543/541…)가 매칭된 경우에만**
+        그 문서를 무효화한다. 일부만 취소된(예: 생산만 취소되고 component 소비는 정상인)
+        문서는 건드리지 않아 정상 문서가 잘못 제거되는 것을 막는다.
 
-        소비(543/541) reversal 을 먼저 처리해 '어느 문서가 잘못됐는지'를 특정하고,
-        생산(101) reversal 은 가능하면 이미 무효화된 문서의 원본에 매칭시켜 정상 문서가
-        잘못 제거되는 것을 막는다. self.rows 원본은 보존하고 엣지 입력만 거른다.
+        소비(543/541) reversal 을 먼저 처리하고, 생산(101) reversal 은 이미 매칭이 시작된
+        문서를 우선 매칭시켜 매칭을 '잘못된 문서'에 모은다. self.rows 원본은 보존한다.
         """
         if rows.empty:
             return rows
         rev_set = set(MOVEMENT_CLASS["reversal"])
+        prod_mvts = set(MOVEMENT_CLASS["production_out"]) | set(MOVEMENT_CLASS["production_consume"])
         consume_orig = set(MOVEMENT_CLASS["production_consume"])
         recs = rows.to_dict("records")
 
@@ -581,28 +583,31 @@ class GenealogyTool:
             if r["movement_type"] not in rev_set:
                 orig_index[key(r["movement_type"], r)].append(i)
 
-        rev_rows = [(i, r) for i, r in enumerate(recs)
-                    if r["movement_type"] in REVERSAL_TO_ORIGINAL]
-        # 소비 reversal 먼저 (어느 생산 문서가 잘못됐는지 특정)
+        rev_rows = [(i, r) for i, r in enumerate(recs) if r["movement_type"] in REVERSAL_TO_ORIGINAL]
         rev_rows.sort(key=lambda ir: 0 if REVERSAL_TO_ORIGINAL[ir[1]["movement_type"]] in consume_orig else 1)
 
-        void_docs: Set[str] = set()
-        used: Set[int] = set()
+        matched: Set[int] = set()
+        doc_match_count: Dict[str, int] = defaultdict(int)
         for _, r in rev_rows:
             orig_mvt = REVERSAL_TO_ORIGINAL[r["movement_type"]]
-            cands = [j for j in orig_index.get(key(orig_mvt, r), []) if j not in used]
+            cands = [j for j in orig_index.get(key(orig_mvt, r), []) if j not in matched]
             if not cands:
                 continue
-            pref = [j for j in cands if recs[j]["material_doc"] in void_docs]
+            pref = [j for j in cands if doc_match_count[clean_str(recs[j]["material_doc"])] > 0]
             j = pref[0] if pref else cands[0]
-            used.add(j)
-            doc = clean_str(recs[j]["material_doc"])
-            if doc:
-                void_docs.add(doc)
+            matched.add(j)
+            doc_match_count[clean_str(recs[j]["material_doc"])] += 1
+
+        # 생산 movement 가 모두 reversal 에 매칭된 문서만 무효화(부분 취소는 보존)
+        doc_prod: Dict[str, List[int]] = defaultdict(list)
+        for i, r in enumerate(recs):
+            if r["movement_type"] in prod_mvts:
+                doc_prod[clean_str(r["material_doc"])].append(i)
+        void_docs = {d for d, idxs in doc_prod.items() if d and idxs and all(i in matched for i in idxs)}
 
         if not void_docs:
             return rows
-        self.build_warnings.append(f"reversal-net: voided {len(void_docs)} reversed document(s)")
+        self.build_warnings.append(f"reversal-net: voided {len(void_docs)} fully-reversed document(s)")
         return rows[~rows["material_doc"].isin(void_docs)].copy()
 
     # ----------------------------------------------------------
