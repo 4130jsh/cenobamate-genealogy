@@ -1,0 +1,3 @@
+# frontend(Streamlit) 전용 의존성. 엔진(genealogy_tool.py)은 pandas-only 제약 유지.
+streamlit>=1.30
+pandas>=1.5

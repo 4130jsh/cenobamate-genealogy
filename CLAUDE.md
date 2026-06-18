@@ -18,9 +18,13 @@ SAP MB51 자재이동 export와 BOM 데이터베이스를 결합해 배치 단�
 ├── CLAUDE.md                  # 이 파일 (프로젝트 컨텍스트)
 ├── README.md                  # 사용자용 개요·실행법
 ├── HANDOFF.md                 # 작업 인수인계 문서 (현재 상태·다음 작업)
-├── requirements.txt           # Python 의존성
+├── requirements.txt           # 엔진 의존성 (pandas/numpy/openpyxl)
+├── requirements-frontend.txt  # frontend 전용 의존성 (streamlit)
 ├── src/
 │   └── genealogy_tool.py      # 메인 추적 도구 (구 v4, 단일 파일)
+├── frontend/                  # [Phase 3] Streamlit 조회 앱 (warehouse 읽기 전용)
+│   ├── app.py                 #   UI (FP→RSM 상류 그래프 등)
+│   └── genealogy_db.py        #   DB 로딩·서브그래프·Graphviz DOT (순수 함수, 테스트됨)
 ├── data/
 │   ├── Cenobamate_BOM_DB_v1.sqlite   # BOM/단가/관세 DB (단일 출처)
 │   ├── Cenobamate_BOM_DB_v1.xlsx     # 동일 내용 Excel (사람 편집용)
@@ -85,8 +89,14 @@ python src/genealogy_tool.py --from-store --store warehouse.sqlite \
 ```
 
 데이터 제품 로드맵: ①수시 적재(`--ingest`, raw_sap_rows 누적) → ②엔진 빌드(`--from-store`) →
-③결과 DB화(`--write-db`, gen_*·build_runs·v_latest_*) → ④Streamlit frontend(예정).
+③결과 DB화(`--write-db`, gen_*·build_runs·v_latest_*) → ④Streamlit frontend(`frontend/app.py`).
 warehouse sqlite 하나가 raw 누적·결과·빌드이력을 모두 보유(향후 Postgres 이전 가능 스키마).
+
+```bash
+# [Phase 3] frontend 실행 (warehouse 의 v_latest_* 를 읽어 FP→RSM 상류 그래프 조회)
+pip install -r requirements-frontend.txt
+streamlit run frontend/app.py   # 사이드바에서 warehouse 경로 지정 (기본 data/warehouse.sqlite)
+```
 
 주요 플래그: `--direction upstream|downstream|both`, `--max-depth N`, `--strict-dates`,
 `--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`,
@@ -99,8 +109,10 @@ warehouse sqlite 하나가 raw 누적·결과·빌드이력을 모두 보유(향
 1. 구문 점검: `python -c "import ast; ast.parse(open('src/genealogy_tool.py').read())"`
 2. BOM DB 로딩 검증: DB로 `load_bom_master`가 정상 동작하는지
 3. 스모크/회귀 테스트: `python tests/test_smoke.py` (합성 SAP fixture `tests/synth_sap.py`로
-   엣지 3규칙·날짜위반·strict-dates·tier분류·상류추적·BOM_EXPECTED분리·다중output페어링 검증)
-4. 회귀: tier 분류·생산 페어링·분할매칭·잔차·날짜위반이 유지되는지
+   엣지 3규칙·날짜위반·strict-dates·tier분류·상류추적·BOM_EXPECTED분리·다중output페어링·
+   결과DB화·store적재idempotency 검증)
+4. frontend 데이터계층: `python tests/test_frontend.py` (warehouse 로딩·FP→RSM 상류 서브그래프·DOT 생성)
+5. 회귀: tier 분류·생산 페어링·분할매칭·잔차·날짜위반이 유지되는지
 
 ## 알려진 제약
 
