@@ -102,7 +102,8 @@ streamlit run frontend/app.py   # 사이드바에서 warehouse 경로 지정 (�
 `--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`,
 `--pairing-mode bom-aware|legacy`(다중 output 생산 페어링 점수식; 기본 bom-aware=BOM 토폴로지 우선, legacy=구 item-순서 하위호환),
 `--store PATH`·`--ingest`·`--from-store`(Phase 2 누적 store), `--write-db PATH`·`--db-replace`(결과 DB화),
-`--legacy-transfer-pairing`(구 transfer 페어링 복원; 기본은 같은 tier 다른 strength 가짜 전환 차단)
+`--legacy-transfer-pairing`(구 transfer 페어링 복원; 기본은 같은 tier 다른 strength 가짜 전환 차단),
+`--no-net-reversals`(reversal 넷팅 끄기; 기본은 취소된 원본 문서를 엣지에서 무효화)
 
 ## 검증 방법 (코드 수정 후 반드시)
 

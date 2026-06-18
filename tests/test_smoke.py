@@ -109,6 +109,22 @@ def test_legit_cross_tier_transfer_kept():
     assert _has_edge(tool, "DOC_TRANSFER", "SP-B1", "FP-B1"), "정상 SP→FP 전환이 사라짐"
 
 
+def test_reversal_netting_removes_wrong_input():
+    # 기본(넷팅 on): 취소된 오작성 문서의 APIBAD→DPR 가짜 엣지는 제거, APIOK→DPR 만 남음
+    tool, _ = _build()
+    assert _has_edge(tool, "PROD", "APIOK", "DPR"), "정상 APIOK→DPR 엣지가 사라짐"
+    assert not _has_edge(tool, "PROD", "APIBAD", "DPR"), "취소된 APIBAD→DPR 가짜 엣지가 남음"
+    assert any("reversal-net" in w for w in tool.build_warnings), "reversal-net 경고 누락"
+
+
+def test_no_net_reversals_keeps_wrong_input():
+    # 넷팅 off: 구 동작 — 취소된 원본이 살아남아 APIBAD→DPR 가짜 엣지가 다시 생김
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False); tmp.close()
+    write_synthetic_sap(tmp.name)
+    tool = gt.GenealogyTool(sap_files=[tmp.name], bom_db=BOM_DB, net_reversals=False)
+    assert _has_edge(tool, "PROD", "APIBAD", "DPR"), "넷팅 off 인데 취소 원본 엣지가 복원되지 않음"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함

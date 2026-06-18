@@ -66,6 +66,8 @@ MOVEMENT_CLASS = {
 }
 DEFAULT_EXCLUDE_MOVEMENTS = set(MOVEMENT_CLASS["exclude"])
 DEFAULT_REVERSAL_MOVEMENTS = set(MOVEMENT_CLASS["reversal"])
+# reversal movement → 그것이 취소하는 원본 movement (reversal 넷팅용)
+REVERSAL_TO_ORIGINAL = {102: 101, 542: 541, 544: 543, 532: 531, 922: 921, 926: 925}
 DEFAULT_MAX_DEPTH = 12
 EPS = 1e-6
 
@@ -215,6 +217,7 @@ class GenealogyTool:
         from_store: Optional[str] = None,   # Phase 2: 누적 store 에서 행을 읽어 빌드
         build: bool = True,                 # Phase 2: 적재 전용 시 엣지 빌드 생략
         legacy_transfer_pairing: bool = False,  # transfer 같은-tier 다른-material 가짜전환 차단(기본 on)
+        net_reversals: bool = True,         # reversal 로 취소된 원본 문서를 엣지에서 무효화(기본 on)
     ) -> None:
         self.sap_files = list(sap_files) if sap_files else []
         self.bom_db = bom_db
@@ -223,6 +226,7 @@ class GenealogyTool:
         self.split_matching = split_matching
         self.strict_dates = strict_dates
         self.legacy_transfer_pairing = legacy_transfer_pairing
+        self.net_reversals = net_reversals
         self.pairing_mode = pairing_mode if pairing_mode in ("legacy", "bom-aware") else "bom-aware"
         self.excluded_movements = excluded_movements or set(DEFAULT_EXCLUDE_MOVEMENTS)
         self.ignored_movements = set(self.excluded_movements)
@@ -235,7 +239,9 @@ class GenealogyTool:
         self.bom = self.load_bom_master(bom_db)
         self.rows = self.load_rows_from_store(from_store) if from_store else self.load_sap_files(self.sap_files)
         if build:
-            self.edges = self.build_edges(self.rows)
+            # reversal 로 취소된 원본 문서는 엣지 빌드 입력에서 제외(self.rows 자체는 보존)
+            edge_rows = self.void_reversed_documents(self.rows) if self.net_reversals else self.rows
+            self.edges = self.build_edges(edge_rows)
             self.nodes = self.build_nodes(self.rows, self.edges)
             self.node_index = {r["node"]: r for r in self.nodes.to_dict("records")} if not self.nodes.empty else {}  # B-2
             self.up_adj, self.down_adj = self.build_adjacency(self.edges)
@@ -541,6 +547,63 @@ class GenealogyTool:
             return "SKBP HQ"
         return {"1210": "Patheon", "1220": "PCI CA", "1230": "PCI US", "1310": "Avara",
                 "2100": "SKLSI / 3PL", "2020": "SKLSL"}.get(plant, self.bom.plant_role.get(plant, plant))
+
+    # ----------------------------------------------------------
+    # reversal 넷팅: 취소된 원본 문서 무효화
+    # ----------------------------------------------------------
+    def void_reversed_documents(self, rows: pd.DataFrame) -> pd.DataFrame:
+        """reversal(102/544/…) 과 매칭되는 원본 movement 의 문서를 통째로 무효화.
+
+        SAP 에 잘못 작성됐다가 취소된 거래는 '원본(101/543)'과 '취소(102/544)'가
+        모두 남는다. 기본 빌드는 취소 movement 만 제외해 원본이 살아남아 가짜 엣지를
+        만든다. 여기서 reversal 을 (원본 movement·material·batch·plant·sloc·PO·|수량|)
+        로 원본에 매칭해, 그 원본이 속한 material document 전체를 엣지 입력에서 제외한다.
+
+        소비(543/541) reversal 을 먼저 처리해 '어느 문서가 잘못됐는지'를 특정하고,
+        생산(101) reversal 은 가능하면 이미 무효화된 문서의 원본에 매칭시켜 정상 문서가
+        잘못 제거되는 것을 막는다. self.rows 원본은 보존하고 엣지 입력만 거른다.
+        """
+        if rows.empty:
+            return rows
+        rev_set = set(MOVEMENT_CLASS["reversal"])
+        consume_orig = set(MOVEMENT_CLASS["production_consume"])
+        recs = rows.to_dict("records")
+
+        def qk(q):
+            return round(abs(float(q)), 3)
+
+        def key(mvt, r):
+            return (mvt, r["material"], r["batch"], r["plant"], r["sloc"],
+                    clean_str(r["purchase_order"]), qk(r["qty"]))
+
+        orig_index: Dict[Tuple, List[int]] = defaultdict(list)
+        for i, r in enumerate(recs):
+            if r["movement_type"] not in rev_set:
+                orig_index[key(r["movement_type"], r)].append(i)
+
+        rev_rows = [(i, r) for i, r in enumerate(recs)
+                    if r["movement_type"] in REVERSAL_TO_ORIGINAL]
+        # 소비 reversal 먼저 (어느 생산 문서가 잘못됐는지 특정)
+        rev_rows.sort(key=lambda ir: 0 if REVERSAL_TO_ORIGINAL[ir[1]["movement_type"]] in consume_orig else 1)
+
+        void_docs: Set[str] = set()
+        used: Set[int] = set()
+        for _, r in rev_rows:
+            orig_mvt = REVERSAL_TO_ORIGINAL[r["movement_type"]]
+            cands = [j for j in orig_index.get(key(orig_mvt, r), []) if j not in used]
+            if not cands:
+                continue
+            pref = [j for j in cands if recs[j]["material_doc"] in void_docs]
+            j = pref[0] if pref else cands[0]
+            used.add(j)
+            doc = clean_str(recs[j]["material_doc"])
+            if doc:
+                void_docs.add(doc)
+
+        if not void_docs:
+            return rows
+        self.build_warnings.append(f"reversal-net: voided {len(void_docs)} reversed document(s)")
+        return rows[~rows["material_doc"].isin(void_docs)].copy()
 
     # ----------------------------------------------------------
     # Edge construction
@@ -1396,6 +1459,9 @@ def parse_args(argv=None):
                    help="다중 output 생산 페어링 점수식 (bom-aware=기본/BOM 토폴로지 우선, legacy=하위호환/구 item-순서)")
     p.add_argument("--legacy-transfer-pairing", action="store_true",
                    help="구 transfer 페어링 복원(같은 tier 다른 strength 간 가짜 전환 엣지 허용). 기본은 차단")
+    p.add_argument("--no-net-reversals", dest="net_reversals", action="store_false",
+                   help="reversal 넷팅 비활성화(취소된 원본 문서를 그대로 둠). 기본은 넷팅 on")
+    p.set_defaults(net_reversals=True)
     p.add_argument("--write-db", metavar="PATH",
                    help="genealogy 결과(nodes/edges/bom_expected)를 결과 sqlite 로 적재 (frontend/누적 조회용)")
     p.add_argument("--db-run-id", help="결과 DB 적재 시 run_id 지정(미지정 시 타임스탬프)")
@@ -1433,7 +1499,8 @@ def main(argv=None) -> int:
         ing = GenealogyTool(sap_files=args.sap, bom_db=args.bom_db, include_reversals=args.include_reversals,
                             excluded_movements=excluded, split_matching=not args.no_split_matching,
                             strict_dates=args.strict_dates, pairing_mode=args.pairing_mode,
-                         legacy_transfer_pairing=args.legacy_transfer_pairing, build=False)
+                         legacy_transfer_pairing=args.legacy_transfer_pairing,
+                         net_reversals=args.net_reversals, build=False)
         stats = ing.ingest_to_store(args.store)
         print("\n=== Ingest Summary ===")
         print(f"batch={stats['ingest_batch_id']}  in={stats['rows_in_batch']:,}  "
@@ -1447,6 +1514,7 @@ def main(argv=None) -> int:
                          excluded_movements=excluded, split_matching=not args.no_split_matching,
                          strict_dates=args.strict_dates, pairing_mode=args.pairing_mode,
                          legacy_transfer_pairing=args.legacy_transfer_pairing,
+                         net_reversals=args.net_reversals,
                          from_store=args.store if args.from_store else None)
     trace_edges = trace_nodes = trace_usage = bom_expected = meta = None
     Path(args.out).mkdir(parents=True, exist_ok=True)

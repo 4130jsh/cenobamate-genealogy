@@ -109,6 +109,20 @@ def build_rows() -> list[dict]:
         _row("DOC_BADSTRENGTH", 1, "4CNS0Z2001ZZ", "SPX0", "4100", 301, -10.0, "2026-08-01"),
         _row("DOC_BADSTRENGTH", 2, "4CNS1Z2001ZZ", "SPX1", "4100", 301, +10.0, "2026-08-01"),
     ]
+
+    # --- 케이스 9: 잘못 작성됐다가 취소(reversal)된 생산 문서 (reversal 넷팅 검증) ---
+    # 같은 DP 배치(DPR)를 만든 두 생산 문서: 정상(APIOK 투입)과 오작성(APIBAD 투입).
+    # 오작성 문서가 102/544 로 취소됨. 넷팅은 취소된 원본 문서를 무효화해
+    # APIBAD→DPR 가짜 엣지를 제거하고 APIOK→DPR 만 남겨야 한다.
+    r += [
+        _row("DOC_RGOOD", 1, API, "APIOK", "1104", 543, -50.0, "2026-09-01", po="PO9", po_item="9"),
+        _row("DOC_RGOOD", 2, DP, "DPR", "3100", 101, +50.0, "2026-09-01", po="PO9", po_item="9"),
+        _row("DOC_RWRONG", 1, API, "APIBAD", "1104", 543, -50.0, "2026-09-02", po="PO9", po_item="9"),
+        _row("DOC_RWRONG", 2, DP, "DPR", "3100", 101, +50.0, "2026-09-02", po="PO9", po_item="9"),
+        # 취소 문서: 오작성분의 소비(544)·생산(102)을 역분개
+        _row("DOC_RREV", 1, API, "APIBAD", "1104", 544, +50.0, "2026-09-03", po="PO9", po_item="9"),
+        _row("DOC_RREV", 2, DP, "DPR", "3100", 102, -50.0, "2026-09-03", po="PO9", po_item="9"),
+    ]
     return r
 
 
