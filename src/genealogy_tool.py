@@ -331,8 +331,13 @@ class GenealogyTool:
     def load_sap_files(self, files: Sequence[str]) -> pd.DataFrame:
         expanded: List[str] = []
         for f in files:
-            matches = glob.glob(f)
-            expanded.extend(matches if matches else [f])
+            if any(ch in f for ch in "*?["):  # 와일드카드: 매칭 0건이면 명확히 안내
+                matches = sorted(glob.glob(f))
+                if not matches:
+                    raise FileNotFoundError(f"패턴과 일치하는 SAP 파일이 없습니다: {f}")
+                expanded.extend(matches)
+            else:
+                expanded.append(f)
         if not expanded:
             raise ValueError("No SAP Excel files supplied")
         dfs: List[pd.DataFrame] = []
