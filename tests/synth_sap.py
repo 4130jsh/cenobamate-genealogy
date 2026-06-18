@@ -123,6 +123,35 @@ def build_rows() -> list[dict]:
         _row("DOC_RREV", 1, API, "APIBAD", "1104", 544, +50.0, "2026-09-03", po="PO9", po_item="9"),
         _row("DOC_RREV", 2, DP, "DPR", "3100", 102, -50.0, "2026-09-03", po="PO9", po_item="9"),
     ]
+
+    # --- 케이스 10: 같은 DP를 만든 GR 3건 중 앞의 2건이 취소(연대순 넷팅) ---
+    # 동일 DP 배치 DPC 를 3번 입고(101)했고 앞 2건이 reversal 됨. 연대순 매칭이면
+    # 가장 이른 두 문서가 무효화되고 '마지막' 문서(DOC_C3, APIC3 투입)만 살아남아야 한다.
+    r += [
+        _row("DOC_C1", 1, API, "APIC1", "1104", 543, -50.0, "2026-10-01", po="POC", po_item="1"),
+        _row("DOC_C1", 2, "3CNY1Z001ZZZ", "DPC", "3100", 101, +50.0, "2026-10-01", po="POC", po_item="1"),
+        _row("DOC_C2", 1, API, "APIC2", "1104", 543, -50.0, "2026-10-02", po="POC", po_item="1"),
+        _row("DOC_C2", 2, "3CNY1Z001ZZZ", "DPC", "3100", 101, +50.0, "2026-10-02", po="POC", po_item="1"),
+        _row("DOC_C3", 1, API, "APIC3", "1104", 543, -50.0, "2026-10-03", po="POC", po_item="1"),
+        _row("DOC_C3", 2, "3CNY1Z001ZZZ", "DPC", "3100", 101, +50.0, "2026-10-03", po="POC", po_item="1"),
+        # 앞 2건 취소(소비 544 + 생산 102)
+        _row("DOC_CR1", 1, API, "APIC1", "1104", 544, +50.0, "2026-10-04", po="POC", po_item="1"),
+        _row("DOC_CR1", 2, "3CNY1Z001ZZZ", "DPC", "3100", 102, -50.0, "2026-10-04", po="POC", po_item="1"),
+        _row("DOC_CR2", 1, API, "APIC2", "1104", 544, +50.0, "2026-10-05", po="POC", po_item="1"),
+        _row("DOC_CR2", 2, "3CNY1Z001ZZZ", "DPC", "3100", 102, -50.0, "2026-10-05", po="POC", po_item="1"),
+    ]
+
+    # --- 케이스 11: 외주 다출력 문서 — PO-item 으로 라인↔부품 매칭 ---
+    # 한 문서에서 같은 DP material 의 두 배치(DPp/DPq)를 생산하고 API 두 로트를 소비.
+    # tier/BOM/UoM 동일하므로 PO-item 만이 어느 API가 어느 DP로 갔는지 가른다.
+    #   APIp(po_item P1)→DPp(po_item P1), APIq(po_item P2)→DPq(po_item P2)
+    # item 거리만 보면 APIp 는 DPq(가까움)로 오결합되지만 PO-item 이 바로잡아야 한다.
+    r += [
+        _row("DOC_POI", 1, API, "API-P", "1104", 543, -50.0, "2026-11-01", po="POX", po_item="P1"),
+        _row("DOC_POI", 2, "3CNY0Z001ZZZ", "DP-Q", "3100", 101, +50.0, "2026-11-01", po="POX", po_item="P2"),
+        _row("DOC_POI", 3, "3CNY0Z001ZZZ", "DP-P", "3100", 101, +50.0, "2026-11-01", po="POX", po_item="P1"),
+        _row("DOC_POI", 4, API, "API-Q", "1104", 543, -50.0, "2026-11-01", po="POX", po_item="P2"),
+    ]
     return r
 
 

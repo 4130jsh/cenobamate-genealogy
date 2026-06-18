@@ -593,8 +593,13 @@ class GenealogyTool:
             cands = [j for j in orig_index.get(key(orig_mvt, r), []) if j not in matched]
             if not cands:
                 continue
-            pref = [j for j in cands if doc_match_count[clean_str(recs[j]["material_doc"])] > 0]
-            j = pref[0] if pref else cands[0]
+            # 연대순 매칭: 이미 매칭 시작된 문서 우선 → 가장 이른 원본부터 취소(마지막 기록이 살아남음)
+            cands.sort(key=lambda j: (
+                0 if doc_match_count[clean_str(recs[j]["material_doc"])] > 0 else 1,
+                clean_str(recs[j]["posting_date"]),
+                clean_str(recs[j]["material_doc"]),
+                recs[j].get("material_doc_item", 0)))
+            j = cands[0]
             matched.add(j)
             doc_match_count[clean_str(recs[j]["material_doc"])] += 1
 
@@ -746,14 +751,16 @@ class GenealogyTool:
             return 0 if (clean_str(o["uom"]) == clean_str(input_r["uom"]) or not o["uom"] or not input_r["uom"]) else 1
 
         if self.pairing_mode == "bom-aware":
-            # A-3+ 점수: BOM 토폴로지 최우선 → tier 인접도 → UoM → 문서 라인 순서(약한 tiebreak)
+            # A-3+ 점수: PO-item 정합(외주 다출력 문서의 라인↔부품 링크) 최우선
+            #   → BOM 토폴로지 → tier 인접도 → UoM → 문서 라인 순서(약한 tiebreak)
             def score(o):
+                po_pen = 0 if (clean_str(o["po_item"]) and clean_str(o["po_item"]) == clean_str(input_r["po_item"])) else 1
                 bom_pen = 0 if self.bom_consistent(input_r["material"], o["material"]) else 1
                 tier_gap = TIER_ORDER.get(o["tier"], 99) - TIER_ORDER.get(input_r["tier"], 99)
                 tier_pen = 0 if tier_gap == 1 else (1 if tier_gap == 0 else 2)  # 인접 tier 최우선
                 prior_bonus = 0 if o["material_doc_item"] < input_r["material_doc_item"] else 1
                 item_dist = abs(int(o["material_doc_item"]) - int(input_r["material_doc_item"]))
-                return (bom_pen, tier_pen, _uom_pen(o), prior_bonus, item_dist)
+                return (po_pen, bom_pen, tier_pen, _uom_pen(o), prior_bonus, item_dist)
             return sorted(cands, key=score)[0]
 
         # legacy(기본) 점수: item 거리 + tier gap(상위일수록 선호) + UoM 불일치 패널티(A-4)

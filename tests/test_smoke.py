@@ -125,6 +125,22 @@ def test_no_net_reversals_keeps_wrong_input():
     assert _has_edge(tool, "PROD", "APIBAD", "DPR"), "넷팅 off 인데 취소 원본 엣지가 복원되지 않음"
 
 
+def test_chronological_netting_keeps_last_gr():
+    # 동일 DP 를 만든 GR 3건 중 앞 2건이 취소 → 마지막 문서(APIC3)만 살아남아야 함
+    tool, _ = _build()
+    assert _has_edge(tool, "PROD", "APIC3", "DPC"), "마지막 GR(APIC3→DPC)이 사라짐"
+    assert not _has_edge(tool, "PROD", "APIC1", "DPC"), "취소된 APIC1→DPC 가 남음"
+    assert not _has_edge(tool, "PROD", "APIC2", "DPC"), "취소된 APIC2→DPC 가 남음"
+
+
+def test_po_item_pairing_in_multi_output():
+    # 외주 다출력 문서에서 PO-item 으로 라인↔부품을 정확히 매칭
+    tool, _ = _build()
+    assert _has_edge(tool, "PROD", "API-P", "DP-P"), "PO-item 매칭 API-P→DP-P 누락"
+    assert _has_edge(tool, "PROD", "API-Q", "DP-Q"), "PO-item 매칭 API-Q→DP-Q 누락"
+    assert not _has_edge(tool, "PROD", "API-P", "DP-Q"), "API-P 가 PO-item 무시하고 DP-Q 로 오결합"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함
