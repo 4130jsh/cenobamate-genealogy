@@ -40,6 +40,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -77,6 +78,10 @@ OPTIONAL_SAP_COLS = [
     "Purchase order", "Reference", "Movement Type Text", "Document Date",
     "Item", "Supplier", "User Name",
 ]
+
+# 정규화 행의 비즈니스 자연키 — 같은 export 내 dedup 및 store 누적 idempotency 의 단일 기준
+NATURAL_KEY_COLS = ["material_doc", "material_doc_item", "material", "batch", "plant", "sloc",
+                    "movement_type", "qty", "purchase_order", "po_item", "reference"]
 
 
 # ============================================================
@@ -200,16 +205,19 @@ class BomMaster:
 class GenealogyTool:
     def __init__(
         self,
-        sap_files: Sequence[str],
-        bom_db: str,
+        sap_files: Optional[Sequence[str]] = None,
+        bom_db: str = "",
         include_reversals: bool = False,
         excluded_movements: Optional[Set[int]] = None,
         split_matching: bool = True,        # A-2
         strict_dates: bool = False,         # C-2
         pairing_mode: str = "bom-aware",    # A-3+: 다중 output 페어링 점수식 (bom-aware 기본, legacy 하위호환)
+        from_store: Optional[str] = None,   # Phase 2: 누적 store 에서 행을 읽어 빌드
+        build: bool = True,                 # Phase 2: 적재 전용 시 엣지 빌드 생략
     ) -> None:
-        self.sap_files = list(sap_files)
+        self.sap_files = list(sap_files) if sap_files else []
         self.bom_db = bom_db
+        self.from_store = from_store
         self.include_reversals = include_reversals
         self.split_matching = split_matching
         self.strict_dates = strict_dates
@@ -223,11 +231,17 @@ class GenealogyTool:
         self.unmatched_rows: List[dict] = []   # C-4
 
         self.bom = self.load_bom_master(bom_db)
-        self.rows = self.load_sap_files(self.sap_files)
-        self.edges = self.build_edges(self.rows)
-        self.nodes = self.build_nodes(self.rows, self.edges)
-        self.node_index = {r["node"]: r for r in self.nodes.to_dict("records")} if not self.nodes.empty else {}  # B-2
-        self.up_adj, self.down_adj = self.build_adjacency(self.edges)
+        self.rows = self.load_rows_from_store(from_store) if from_store else self.load_sap_files(self.sap_files)
+        if build:
+            self.edges = self.build_edges(self.rows)
+            self.nodes = self.build_nodes(self.rows, self.edges)
+            self.node_index = {r["node"]: r for r in self.nodes.to_dict("records")} if not self.nodes.empty else {}  # B-2
+            self.up_adj, self.down_adj = self.build_adjacency(self.edges)
+        else:
+            self.edges = self.empty_edges()
+            self.nodes = self.build_nodes(self.rows, self.edges)
+            self.node_index = {}
+            self.up_adj, self.down_adj = {}, {}
         self.scope_note = self.derive_scope_note()  # C-5
 
     # ----------------------------------------------------------
@@ -381,11 +395,79 @@ class GenealogyTool:
             (out["material"] != "") & (out["batch"] != ""),
             out["material"] + "||" + out["batch"], "",
         )
-        dedup_cols = ["material_doc", "material_doc_item", "material", "batch", "plant", "sloc",
-                      "movement_type", "qty", "purchase_order", "po_item", "reference"]
-        out = out.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
+        out = out.drop_duplicates(subset=NATURAL_KEY_COLS, keep="first").reset_index(drop=True)
         out["row_id"] = range(1, len(out) + 1)
         return out
+
+    # ----------------------------------------------------------
+    # Phase 2: 수시 적재 누적 store (idempotent) + store 에서 빌드
+    # ----------------------------------------------------------
+    def ingest_to_store(self, store_db: str, ingest_batch_id: Optional[str] = None) -> dict:
+        """현재 정규화된 self.rows 를 누적 store(raw_sap_rows)에 idempotent upsert.
+
+        자연키(NATURAL_KEY_COLS) UNIQUE 인덱스 + INSERT OR IGNORE 로, 같은 export 를
+        재적재해도 중복이 쌓이지 않는다. provenance(원본 파일·적재시각)는 행에 보존.
+        """
+        ingest_batch_id = ingest_batch_id or datetime.datetime.now().strftime("ing_%Y%m%dT%H%M%S")
+        ingested_at = datetime.datetime.now().isoformat(timespec="seconds")
+        df = self.rows.drop(columns=["row_id"], errors="ignore").copy()
+        df["ingest_batch_id"] = ingest_batch_id
+        df["ingested_at"] = ingested_at
+        cols = list(df.columns)
+
+        Path(os.path.dirname(store_db) or ".").mkdir(parents=True, exist_ok=True)
+        con = sqlite3.connect(store_db)
+        try:
+            cur = con.cursor()
+            # 최초 1회 테이블·유니크 인덱스 생성 (df 스키마 기준)
+            df.head(0).to_sql("raw_sap_rows", con, if_exists="append", index=False)
+            key_expr = ", ".join(f'"{c}"' for c in NATURAL_KEY_COLS)
+            cur.execute(f'CREATE UNIQUE INDEX IF NOT EXISTS ux_raw_natural ON raw_sap_rows ({key_expr})')
+            cur.execute("""CREATE TABLE IF NOT EXISTS ingest_log (
+                ingest_batch_id TEXT, ingested_at TEXT, source_exports TEXT,
+                rows_in_batch INTEGER, rows_new INTEGER, rows_duplicate INTEGER)""")
+            # 임시 테이블 경유 INSERT OR IGNORE (자연키 충돌은 무시 = 기존 유지)
+            df.to_sql("_ingest_tmp", con, if_exists="replace", index=False)
+            before = cur.execute("SELECT COUNT(*) FROM raw_sap_rows").fetchone()[0]
+            col_expr = ", ".join(f'"{c}"' for c in cols)
+            cur.execute(f'INSERT OR IGNORE INTO raw_sap_rows ({col_expr}) SELECT {col_expr} FROM _ingest_tmp')
+            after = cur.execute("SELECT COUNT(*) FROM raw_sap_rows").fetchone()[0]
+            cur.execute("DROP TABLE _ingest_tmp")
+            rows_new = after - before
+            rows_dup = len(df) - rows_new
+            cur.execute("INSERT INTO ingest_log VALUES (?,?,?,?,?,?)", (
+                ingest_batch_id, ingested_at,
+                json.dumps(sorted(self.sap_files), ensure_ascii=False),
+                len(df), rows_new, rows_dup))
+            con.commit()
+            total = after
+        finally:
+            con.close()
+        return {"ingest_batch_id": ingest_batch_id, "rows_in_batch": len(df),
+                "rows_new": rows_new, "rows_duplicate": rows_dup, "store_total_rows": total}
+
+    def load_rows_from_store(self, store_db: str) -> pd.DataFrame:
+        """누적 store(raw_sap_rows)에서 정규화 행을 읽어 빌드 입력으로 복원."""
+        if not os.path.exists(store_db):
+            raise FileNotFoundError(f"누적 store 가 없습니다: {store_db}")
+        con = sqlite3.connect(store_db)
+        try:
+            df = pd.read_sql_query("SELECT * FROM raw_sap_rows", con)
+        finally:
+            con.close()
+        if df.empty:
+            return df
+        df = df.drop(columns=["ingest_batch_id", "ingested_at"], errors="ignore")
+        # sqlite 왕복 후 dtype/NULL 복원
+        df["movement_type"] = pd.to_numeric(df["movement_type"], errors="coerce").fillna(0).astype(int)
+        df["material_doc_item"] = pd.to_numeric(df["material_doc_item"], errors="coerce").fillna(0).astype(int)
+        df["qty"] = pd.to_numeric(df["qty"], errors="coerce").fillna(0.0).astype(float)
+        for c in df.columns:
+            if df[c].dtype == object:
+                df[c] = df[c].fillna("")
+        df = df.reset_index(drop=True)
+        df["row_id"] = range(1, len(df) + 1)
+        return df
 
     def classify_tier_vectorized(self, out: pd.DataFrame) -> pd.Series:
         mat = out["material"].fillna("").str.upper()
@@ -1285,7 +1367,7 @@ def print_summary(tool: GenealogyTool, meta=None) -> None:
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Cenobamate batch genealogy tracer v2")
-    p.add_argument("--sap", nargs="+", required=True)
+    p.add_argument("--sap", nargs="+", help="SAP MB51 export(.xlsx) (--from-store 사용 시 생략 가능)")
     p.add_argument("--bom-db", required=True)
     p.add_argument("--batch")
     p.add_argument("--material")
@@ -1304,6 +1386,12 @@ def parse_args(argv=None):
     p.add_argument("--db-run-id", help="결과 DB 적재 시 run_id 지정(미지정 시 타임스탬프)")
     p.add_argument("--db-replace", action="store_true",
                    help="결과 DB 의 기존 빌드를 비우고 이번 빌드만 남김(기본: append 누적)")
+    # Phase 2: 수시 적재 누적 store
+    p.add_argument("--store", metavar="PATH", help="누적 store sqlite (raw_sap_rows 축적)")
+    p.add_argument("--ingest", action="store_true",
+                   help="--sap 를 정규화해 --store 에 idempotent 누적 (자연키 dedup)")
+    p.add_argument("--from-store", action="store_true",
+                   help="--store 의 누적 행으로 genealogy 빌드(--sap 대신)")
     p.add_argument("--batch-list", help="배치 목록 파일(줄당 'batch' 또는 'batch,material') 일괄 추적")
     p.add_argument("--trace-scope", choices=["all-fp", "all-leaf", "all"], help="시드 자동 선택 일괄 추적")
     p.add_argument("--html", action="store_true", help="genealogy HTML 시각화 생성")
@@ -1313,9 +1401,36 @@ def parse_args(argv=None):
 def main(argv=None) -> int:
     args = parse_args(argv)
     excluded = {parse_int(x) for x in args.exclude_movements.split(",") if clean_str(x)}
+
+    # 입력 소스 검증
+    if args.ingest and not (args.sap and args.store):
+        print("ERROR: --ingest 에는 --sap 와 --store 가 필요합니다", file=sys.stderr)
+        return 2
+    if args.from_store and not args.store:
+        print("ERROR: --from-store 에는 --store 가 필요합니다", file=sys.stderr)
+        return 2
+    if not args.from_store and not args.sap:
+        print("ERROR: --sap 또는 --from-store 중 하나가 필요합니다", file=sys.stderr)
+        return 2
+
+    # 적재 전용 흐름: --sap 정규화 후 store 에 누적. (--from-store 동반 시 이어서 빌드)
+    if args.ingest:
+        ing = GenealogyTool(sap_files=args.sap, bom_db=args.bom_db, include_reversals=args.include_reversals,
+                            excluded_movements=excluded, split_matching=not args.no_split_matching,
+                            strict_dates=args.strict_dates, pairing_mode=args.pairing_mode, build=False)
+        stats = ing.ingest_to_store(args.store)
+        print("\n=== Ingest Summary ===")
+        print(f"batch={stats['ingest_batch_id']}  in={stats['rows_in_batch']:,}  "
+              f"new={stats['rows_new']:,}  duplicate={stats['rows_duplicate']:,}  "
+              f"store_total={stats['store_total_rows']:,}")
+        if not (args.from_store or args.batch or args.material or args.trace_scope
+                or args.batch_list or args.write_db or args.html or args.export_xlsx):
+            return 0  # 적재만 요청한 경우 종료
+
     tool = GenealogyTool(sap_files=args.sap, bom_db=args.bom_db, include_reversals=args.include_reversals,
                          excluded_movements=excluded, split_matching=not args.no_split_matching,
-                         strict_dates=args.strict_dates, pairing_mode=args.pairing_mode)
+                         strict_dates=args.strict_dates, pairing_mode=args.pairing_mode,
+                         from_store=args.store if args.from_store else None)
     trace_edges = trace_nodes = trace_usage = bom_expected = meta = None
     Path(args.out).mkdir(parents=True, exist_ok=True)
 

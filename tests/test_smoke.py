@@ -216,6 +216,43 @@ def test_write_results_db_append_then_replace():
         con.close()
 
 
+def _ingest_build(store_db, pairing_mode=None):
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    tmp.close()
+    write_synthetic_sap(tmp.name)
+    kw = {} if pairing_mode is None else {"pairing_mode": pairing_mode}
+    ing = gt.GenealogyTool(sap_files=[tmp.name], bom_db=BOM_DB, build=False, **kw)
+    stats = ing.ingest_to_store(store_db)
+    return ing, stats
+
+
+def test_ingest_idempotent():
+    dbf = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+    dbf.close()
+    _, s1 = _ingest_build(dbf.name)
+    assert s1["rows_new"] == s1["rows_in_batch"], "최초 적재인데 new 가 전체와 다름"
+    assert s1["rows_duplicate"] == 0
+    # 같은 export 재적재 → 전부 중복, store 총량 불변
+    _, s2 = _ingest_build(dbf.name)
+    assert s2["rows_new"] == 0, "재적재인데 새 행이 생김 (idempotency 깨짐)"
+    assert s2["rows_duplicate"] == s2["rows_in_batch"]
+    assert s2["store_total_rows"] == s1["store_total_rows"], "재적재로 store 총량이 늘어남"
+
+
+def test_build_from_store_matches_direct():
+    # store 누적 후 빌드한 결과가 --sap 직접 빌드와 동일해야 함
+    dbf = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False)
+    dbf.close()
+    _ingest_build(dbf.name)
+    from_store = gt.GenealogyTool(bom_db=BOM_DB, from_store=dbf.name)
+    direct, _ = _build()
+    assert len(from_store.rows) == len(direct.rows), "store 복원 행수가 직접 정규화와 다름"
+    a = from_store.edges["edge_kind"].value_counts().to_dict()
+    b = direct.edges["edge_kind"].value_counts().to_dict()
+    assert a == b, f"store 빌드 엣지 분포가 직접 빌드와 다름: {a} vs {b}"
+    assert _has_edge(from_store, "PROD", "RSM-M1", "API1-M1"), "store 빌드에서 bom-aware 페어링 유실"
+
+
 # ----------------------------------------------------------------------
 # 단독 실행 러너 (pytest 없이)
 # ----------------------------------------------------------------------

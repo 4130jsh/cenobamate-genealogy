@@ -74,11 +74,24 @@ python src/genealogy_tool.py --sap <SAP.xlsx> --bom-db data/Cenobamate_BOM_DB_v1
 # 전 완제품 일괄 추적
 python src/genealogy_tool.py --sap <SAP.xlsx> --bom-db data/Cenobamate_BOM_DB_v1.sqlite \
   --trace-scope all-fp --direction upstream --html --export-xlsx --out out
+
+# [Phase 2] 수시 적재: 새 MB51 export 를 누적 store 에 idempotent 누적 (자연키 dedup)
+python src/genealogy_tool.py --sap <NEW_MB51.xlsx> --bom-db data/Cenobamate_BOM_DB_v1.sqlite \
+  --store warehouse.sqlite --ingest
+
+# [Phase 2] 누적분 전체로 빌드 + 결과 DB화 (frontend 가 읽을 warehouse)
+python src/genealogy_tool.py --from-store --store warehouse.sqlite \
+  --bom-db data/Cenobamate_BOM_DB_v1.sqlite --out out --write-db warehouse.sqlite --db-replace
 ```
+
+데이터 제품 로드맵: ①수시 적재(`--ingest`, raw_sap_rows 누적) → ②엔진 빌드(`--from-store`) →
+③결과 DB화(`--write-db`, gen_*·build_runs·v_latest_*) → ④Streamlit frontend(예정).
+warehouse sqlite 하나가 raw 누적·결과·빌드이력을 모두 보유(향후 Postgres 이전 가능 스키마).
 
 주요 플래그: `--direction upstream|downstream|both`, `--max-depth N`, `--strict-dates`,
 `--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`,
-`--pairing-mode bom-aware|legacy`(다중 output 생산 페어링 점수식; 기본 bom-aware=BOM 토폴로지 우선, legacy=구 item-순서 하위호환)
+`--pairing-mode bom-aware|legacy`(다중 output 생산 페어링 점수식; 기본 bom-aware=BOM 토폴로지 우선, legacy=구 item-순서 하위호환),
+`--store PATH`·`--ingest`·`--from-store`(Phase 2 누적 store), `--write-db PATH`·`--db-replace`(결과 DB화)
 
 ## 검증 방법 (코드 수정 후 반드시)
 
