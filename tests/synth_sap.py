@@ -179,6 +179,12 @@ def build_rows() -> list[dict]:
         _row("DOC_DLV_A", 1, "5CNB2ZAA1ZZZ", "BOTX", "5100", 911, -10.0, "2026-12-10", ref="DLV1"),
         _row("DOC_DLV_B", 1, "5CNB2ZAA1ZZZ", "BOTY", "5100", 912, +10.0, "2026-12-11", ref="DLV1"),
     ]
+    # --- 케이스 15: 같은 배치 위치 이동(self-loop) — 계보 엣지로 만들면 안 됨 ---
+    # 같은 RSM 배치 SLB 가 sloc 1100→1101 로 이동(311 transfer). from==to 자기-루프 금지.
+    r += [
+        _row("DOC_SL", 1, "1CNY001ZZZZZ", "SLB", "1100", 311, -10.0, "2026-12-20", ref="SLR"),
+        _row("DOC_SL", 2, "1CNY001ZZZZZ", "SLB", "1101", 311, +10.0, "2026-12-20", ref="SLR"),
+    ]
     return r
 
 

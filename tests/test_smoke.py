@@ -171,6 +171,14 @@ def test_route_material_actual_upstream_suppresses_expected():
     assert "3CNY2Z001ZZZ" not in exp, f"실제 상류 있는데 Tablet 이 BOM 기대로 표시됨: {exp}"
 
 
+def test_no_self_loop_edges():
+    # 같은 (material,batch) 위치 이동은 자기-루프 엣지를 만들면 안 됨(계보 노이즈)
+    tool, _ = _build()
+    e = tool.edges
+    assert e.empty or (e["from_node"] != e["to_node"]).all(), "자기-루프(from==to) 엣지가 존재함"
+    assert e[(e["from_batch"] == "SLB") & (e["to_batch"] == "SLB")].empty, "SLB 위치이동이 self-loop 엣지로 생성됨"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함

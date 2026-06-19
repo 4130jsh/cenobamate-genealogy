@@ -915,15 +915,15 @@ class GenealogyTool:
                 "purchase_order": r["purchase_order"], "po_item": r["po_item"], "source_file": r["source_file"]}
 
     def is_valid_transfer_candidate(self, nrow, prow) -> bool:
-        if nrow["node"] == prow["node"] and nrow["plant"] == prow["plant"] and nrow["sloc"] == prow["sloc"]:
-            return False
+        if nrow["node"] == prow["node"]:
+            return False                         # 같은 (material,batch) = 자기 자신(위치 이동), 계보 링크 아님
         changed = (nrow["batch"] != prow["batch"] or nrow["material"] != prow["material"]
                    or nrow["plant"] != prow["plant"] or nrow["sloc"] != prow["sloc"])
         if not changed:
             return False
         nt = TIER_ORDER.get(nrow["tier"], 99); pt = TIER_ORDER.get(prow["tier"], 99)
         if nrow["material"] == prow["material"]:
-            return True                          # 같은 material = 위치/배치 재고 이동
+            return True                          # 같은 material 다른 배치 = 위치/배치 재고 이동
         if self.legacy_transfer_pairing:
             return abs(nt - pt) <= 1             # 구 동작(하위호환): tier 1 이내면 허용
         # 다른 material: 같은 tier 의 strength 변경 등 불가능 전환을 차단.
