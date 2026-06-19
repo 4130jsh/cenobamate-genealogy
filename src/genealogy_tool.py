@@ -923,7 +923,11 @@ class GenealogyTool:
             return False
         nt = TIER_ORDER.get(nrow["tier"], 99); pt = TIER_ORDER.get(prow["tier"], 99)
         if nrow["material"] == prow["material"]:
-            return True                          # 같은 material 다른 배치 = 위치/배치 재고 이동
+            # 같은 자재 다른 배치: 공장 간 이전(CMO 핸드오프)만 계보 링크로 인정.
+            #   같은 공장 내 배치 재편/이동은 가짜 전환 거미줄을 만들어 제외.
+            if self.legacy_transfer_pairing:
+                return True
+            return clean_str(nrow["plant"]) != clean_str(prow["plant"])
         if self.legacy_transfer_pairing:
             return abs(nt - pt) <= 1             # 구 동작(하위호환): tier 1 이내면 허용
         # 다른 material: 같은 tier 의 strength 변경 등 불가능 전환을 차단.

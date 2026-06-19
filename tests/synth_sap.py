@@ -30,10 +30,10 @@ COLUMNS = [
 
 
 def _row(doc, item, mat, batch, sloc, mvt, qty, date,
-         po="", po_item="", ref="", uom="KG", desc=""):
+         po="", po_item="", ref="", uom="KG", desc="", plant="1100"):
     return {
         "Material Document": doc, "Material Doc.Item": item, "Material": mat,
-        "Material Description": desc, "Batch": batch, "Plant": "1100",
+        "Material Description": desc, "Batch": batch, "Plant": plant,
         "Storage Location": sloc, "Movement Type": mvt, "Movement Type Text": "",
         "Qty in unit of entry": qty, "Unit of Entry": uom, "Posting Date": date,
         "Document Date": date, "Entry Date": date, "Purchase order": po,
@@ -184,6 +184,20 @@ def build_rows() -> list[dict]:
     r += [
         _row("DOC_SL", 1, "1CNY001ZZZZZ", "SLB", "1100", 311, -10.0, "2026-12-20", ref="SLR"),
         _row("DOC_SL", 2, "1CNY001ZZZZZ", "SLB", "1101", 311, +10.0, "2026-12-20", ref="SLR"),
+    ]
+
+    # --- 케이스 16: 같은 자재·같은 공장 내 다른 배치 재편(311) — 가짜 전환(제외) ---
+    r += [
+        _row("DOC_RESHUF", 1, "1CNY001ZZZZZ", "RSMA", "1100", 311, -10.0, "2026-12-21", ref="RSF"),
+        _row("DOC_RESHUF", 2, "1CNY001ZZZZZ", "RSMB", "1101", 311, +10.0, "2026-12-21", ref="RSF"),
+    ]
+
+    # --- 케이스 17: 같은 자재 공장 간 이전(641→901, HQ 1100→Patheon 1210) — 계보 유지 ---
+    r += [
+        _row("DOC_STO_O", 1, "2CNY001ZZZZZ", "APIH", "V202", 641, -50.0, "2026-12-22",
+             po="STOPO", po_item="1", ref="STO", plant="1100"),
+        _row("DOC_STO_I", 1, "2CNY001ZZZZZ", "APIP", "V101", 901, +50.0, "2026-12-23",
+             po="STOPO", po_item="1", ref="STO", plant="1210"),
     ]
     return r
 

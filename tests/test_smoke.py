@@ -171,6 +171,20 @@ def test_route_material_actual_upstream_suppresses_expected():
     assert "3CNY2Z001ZZZ" not in exp, f"실제 상류 있는데 Tablet 이 BOM 기대로 표시됨: {exp}"
 
 
+def test_same_material_same_plant_transfer_blocked():
+    # 같은 자재·같은 공장 내 다른 배치 재편(RSMA→RSMB)은 가짜 전환이므로 엣지 없음
+    tool, _ = _build()
+    e = tool.edges
+    bad = e[(e["from_batch"] == "RSMA") & (e["to_batch"] == "RSMB")]
+    assert bad.empty, "같은 공장 내 RSM 배치 재편이 전환 엣지로 생성됨"
+
+
+def test_cross_plant_transfer_kept():
+    # 같은 자재 공장 간 이전(HQ→Patheon)은 실제 계보이므로 유지
+    tool, _ = _build()
+    assert _has_edge(tool, "REF_PO_ITEM", "APIH", "APIP"), "공장 간 이전(APIH→APIP) 엣지가 사라짐"
+
+
 def test_no_self_loop_edges():
     # 같은 (material,batch) 위치 이동은 자기-루프 엣지를 만들면 안 됨(계보 노이즈)
     tool, _ = _build()
