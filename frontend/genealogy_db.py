@@ -192,6 +192,9 @@ def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_ex
             continue
         M = _norm(raw_mat, legacy_map)
         have = incoming.get(n, set())
+        # 같은 자재 전입(공장이전/재배치) — 생산은 원천 배치에서 일어남 → 이 노드엔 BOM 기대 표시 안 함
+        if M in have:
+            continue
         for F in sorted(exp_unrouted.get(M, set())):
             emit(F, n)
         routes = exp_routed.get(M)

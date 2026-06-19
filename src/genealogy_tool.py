@@ -1213,6 +1213,9 @@ class GenealogyTool:
             if not inputs:
                 return
             actual_inputs = self.actual_upstream_materials_for_node(to_node, trace_edges)
+            # 같은 자재 전입(공장이전/재배치) — 생산은 원천 배치에서 → 이 노드엔 BOM_EXPECTED 표시 안 함
+            if to_material in actual_inputs:
+                return
             # 변경3: OR 경로 — 한 경로의 input 이 실측되면 다른 경로는 BOM_EXPECTED 표시 안 함.
             #   어느 경로도 미실측이면 ROUTE_DIRECT(없으면 첫 경로)만 표시(중복 방지).
             routes = self.bom.material_to_routes.get(to_material, {})

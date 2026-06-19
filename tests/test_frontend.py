@@ -165,6 +165,18 @@ def test_node_label_has_description():
     assert "[API-B1]" in dot, "배치는 [..] 형태로 라벨에 있어야 함"
 
 
+def test_transfer_in_node_no_bom_expected():
+    # 같은 자재 전입(공장이전)된 노드는 BOM 기대(RSM 점선)를 표시하지 않음
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    bexp = gdb.load_bom_expected(db); legacy = gdb.load_legacy_map(db)
+    start = "2CNY001ZZZZZ||APIP"   # APIH(HQ)→APIP(Patheon) 전입 배치
+    sub, vis, _ = gdb.trace_subgraph(edges, start, "upstream")
+    miss = gdb.expected_missing(vis, edges, bexp, nodes, legacy)
+    apip_miss = [m for m in miss if m["to_node"] == start]
+    assert not apip_miss, f"전입 노드에 BOM 기대가 표시됨: {apip_miss}"
+
+
 def test_legacy_api_no_bom_expected():
     # legacy API 코드(1CNZ*) 노드는 RSM 미관리 → BOM 기대(점선 RSM) 표시 안 함
     db = _warehouse()
