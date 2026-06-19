@@ -253,6 +253,25 @@ def _label(node: str) -> str:
     return f"{mat}\\n{batch}" if batch else str(node)
 
 
+def _san(text: str, maxlen: int = 34) -> str:
+    """DOT 라벨용 정리: 따옴표/역슬래시 제거, 공백 정리, 길이 제한."""
+    t = str(text or "").replace('"', "").replace("\\", "").replace("\n", " ").strip()
+    t = " ".join(t.split())
+    return (t[:maxlen] + "…") if len(t) > maxlen else t
+
+
+def _label_full(node: str, desc: str = "") -> str:
+    """자재코드 + (설명) + [배치] 3줄 라벨."""
+    mat, _, batch = str(node).partition("||")
+    parts = [mat]
+    d = _san(desc)
+    if d:
+        parts.append(d)
+    if batch:
+        parts.append(f"[{batch}]")
+    return "\\n".join(parts)
+
+
 def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
               direction: str = "upstream", expected: Optional[List[dict]] = None) -> str:
     """tier 를 좌→우 컬럼(RSM…FP)으로 정렬한 Graphviz DOT 문자열.
@@ -261,6 +280,12 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
     expected 가 주어지면 '끊긴 상류(BOM_EXPECTED)'를 점선 노드/엣지로 덧그린다.
     """
     node_lookup = dict(zip(nodes_df["node"], nodes_df.get("tier", ""))) if not nodes_df.empty else {}
+    node_desc = dict(zip(nodes_df["node"], nodes_df.get("description", ""))) if not nodes_df.empty else {}
+    mat_desc: Dict[str, str] = {}
+    if not nodes_df.empty and "material" in nodes_df.columns:
+        for m, d in zip(nodes_df["material"], nodes_df.get("description", "")):
+            if m and m not in mat_desc and d:
+                mat_desc[m] = d
     edge_tier: Dict[str, str] = {}
     universe: Set[str] = {start_node}
     for _, r in sub_edges.iterrows():
@@ -287,7 +312,7 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
         t = tier_of(n)
         fill = TIER_COLOR.get(t, "#bdbdbd")
         pen = ' penwidth=3 color="#000000"' if n == start_node else ""
-        lines.append(f'  {nid[n]} [label="{_label(n)}", fillcolor="{fill}", fontcolor="white"{pen}];')
+        lines.append(f'  {nid[n]} [label="{_label_full(n, node_desc.get(n, ""))}", fillcolor="{fill}", fontcolor="white"{pen}];')
         by_tier.setdefault(t, []).append(nid[n])
 
     # BOM_EXPECTED: 실측 없는 기대 상류를 점선 노드+점선 엣지로
@@ -296,7 +321,9 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
             continue
         eid = f"e{k}"
         et = ex.get("from_tier") or "OTHER"
-        lines.append(f'  {eid} [label="{ex["from_material"]}\\n(BOM 기대)", '
+        exd = _san(mat_desc.get(ex["from_material"], ""))
+        exlabel = f'{ex["from_material"]}\\n{exd}\\n(BOM 기대)' if exd else f'{ex["from_material"]}\\n(BOM 기대)'
+        lines.append(f'  {eid} [label="{exlabel}", '
                      f'fillcolor="{EXPECTED_COLOR}", fontcolor="#333333", style="rounded,filled,dashed"];')
         by_tier.setdefault(et, []).append(eid)
         lines.append(f'  {eid} -> {nid[ex["to_node"]]} [color="#9575b5", style=dashed];')
@@ -317,3 +344,32 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
 
 def tier_legend() -> List[Tuple[str, str]]:
     return [(t, TIER_COLOR[t]) for t in ["RSM", "API", "DP", "SP", "FP"]]
+
+
+def dot_to_html(dot: str, title: str = "Genealogy") -> str:
+    """DOT 를 브라우저에서 전체 화면에 맞춰(fit) 렌더하는 독립 HTML.
+
+    Streamlit 스크롤 컨테이너와 달리 그래프 전체가 한 화면에 들어와 캡처/크롭이 쉽다.
+    (렌더는 CDN d3-graphviz 사용 — 로컬 브라우저 인터넷 필요)
+    """
+    safe = dot.replace("\\", "\\\\").replace("`", "\\`")
+    t = _san(title, 120)
+    return f"""<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>{t}</title>
+<style>
+  html,body{{margin:0;height:100%;font-family:Arial,sans-serif}}
+  #bar{{padding:6px 10px;background:#222;color:#eee;font-size:13px}}
+  #bar b{{color:#fff}} #graph{{width:100%;height:calc(100% - 32px)}}
+  #graph svg{{width:100%;height:100%}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm@2/dist/graphviz.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3-graphviz@5/build/d3-graphviz.min.js"></script>
+</head><body>
+<div id="bar"><b>{t}</b> — 휠=확대/축소, 드래그=이동. 전체가 한 화면에 맞춰 그려집니다.</div>
+<div id="graph"></div>
+<script>
+  const dot = `{safe}`;
+  d3.select("#graph").graphviz({{useWorker:false}}).fit(true).zoom(true).renderDot(dot);
+</script>
+</body></html>"""

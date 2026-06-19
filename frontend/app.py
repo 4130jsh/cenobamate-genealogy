@@ -102,8 +102,8 @@ def main() -> None:
                 st.info("이 배치의 실측 상류 엣지가 없습니다(단일 export 범위 한계일 수 있음).")
             else:
                 exp = gdb.expected_missing(visited, edges, bom_expected, nodes, legacy) if show_exp else None
-                st.graphviz_chart(gdb.build_dot(sub, nodes, sel, "upstream", expected=exp),
-                                  use_container_width=True)
+                dot = gdb.build_dot(sub, nodes, sel, "upstream", expected=exp)
+                _graph_with_downloads(dot, f"상류 {sel}", f"up_{sel}")
                 cap = f"상류 노드 {len(visited)}개 · 실측 엣지 {len(sub)}개"
                 if exp:
                     cap += f" · BOM 기대(끊김) {len(exp)}개"
@@ -127,7 +127,8 @@ def main() -> None:
             if sub.empty:
                 st.info("이 배치의 실측 하류 엣지가 없습니다.")
             else:
-                st.graphviz_chart(gdb.build_dot(sub, nodes, sel, "downstream"), use_container_width=True)
+                dot = gdb.build_dot(sub, nodes, sel, "downstream")
+                _graph_with_downloads(dot, f"하류 {sel}", f"down_{sel}")
                 st.caption(f"하류 노드 {len(visited)}개 · 실측 엣지 {len(sub)}개")
                 with st.expander("이 경로의 실측 엣지 테이블"):
                     _edge_table(sub)
@@ -156,10 +157,23 @@ def main() -> None:
 
 
 def _edge_table(sub):
-    cols = [c for c in ["edge_kind", "from_material", "from_batch", "from_tier",
-                        "to_material", "to_batch", "to_tier", "confidence",
+    cols = [c for c in ["edge_kind", "from_material", "from_desc", "from_batch", "from_tier",
+                        "to_material", "to_desc", "to_batch", "to_tier", "confidence",
                         "date_violation", "source_rule"] if c in sub.columns]
     st.dataframe(sub[cols], use_container_width=True, hide_index=True)
+
+
+def _graph_with_downloads(dot: str, title: str, key: str) -> None:
+    """그래프 렌더 + 전체 캡처용 다운로드(HTML/DOT)·복사."""
+    st.graphviz_chart(dot, use_container_width=True)
+    c1, c2 = st.columns(2)
+    c1.download_button("⬇️ 전체 그래프 HTML (한 화면 캡처용)", gdb.dot_to_html(dot, title),
+                       file_name=f"{key}.html", mime="text/html", key=f"dlh_{key}",
+                       use_container_width=True)
+    c2.download_button("⬇️ DOT 소스", dot, file_name=f"{key}.dot",
+                       mime="text/vnd.graphviz", key=f"dld_{key}", use_container_width=True)
+    with st.expander("DOT 소스 복사(붙여넣어 외부 렌더 가능)"):
+        st.code(dot, language="dot")
 
 
 if __name__ == "__main__":

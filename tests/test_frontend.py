@@ -141,6 +141,24 @@ def test_legacy_map_loaded():
     assert lm.get("1CNZ001ZZZZZ") == "2CNY001ZZZZZ", f"legacy 매핑 누락: {lm}"
 
 
+def test_node_label_has_description():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    start = "5CNT014A1ZZZ||FP-B1"
+    sub, _, _ = gdb.trace_subgraph(edges, start, "upstream")
+    dot = gdb.build_dot(sub, nodes, start, "upstream")
+    # API-B1 노드 라벨에 자재 설명이 포함돼야 함
+    assert "Cenobamate API_US" in dot, "노드 라벨에 자재 설명이 안 들어감"
+    assert "[API-B1]" in dot, "배치는 [..] 형태로 라벨에 있어야 함"
+
+
+def test_dot_to_html_full_graph():
+    dot = "digraph { a -> b; }"
+    html = gdb.dot_to_html(dot, "테스트")
+    assert "<html" in html and "renderDot" in html
+    assert "a -> b" in html and ".fit(true)" in html  # 전체 맞춤 렌더
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

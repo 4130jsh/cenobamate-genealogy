@@ -46,8 +46,8 @@ def build_rows() -> list[dict]:
 
     # --- 케이스 1: PROD (같은 문서 내 543 소비 + 101 산출) → RSM → API ---
     r += [
-        _row("DOC_PROD1", 1, RSM, "RSM-B1", "1100", 543, -100.0, "2026-01-05"),
-        _row("DOC_PROD1", 2, API, "API-B1", "1104", 101, +50.0, "2026-01-05"),
+        _row("DOC_PROD1", 1, RSM, "RSM-B1", "1100", 543, -100.0, "2026-01-05", desc="YKP1941 RSM"),
+        _row("DOC_PROD1", 2, API, "API-B1", "1104", 101, +50.0, "2026-01-05", desc="Cenobamate API_US"),
     ]
 
     # --- 케이스 2: REF_PO_ITEM (Reference+PO+Item 동일, 다른 문서, 음수→양수) → API → DP ---
