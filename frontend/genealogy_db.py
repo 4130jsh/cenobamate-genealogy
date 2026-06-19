@@ -148,33 +148,55 @@ def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_ex
                      nodes_df: pd.DataFrame, legacy_map: Optional[Dict[str, str]] = None) -> List[dict]:
     """서브그래프 각 노드에서 BOM 상 기대되지만 실측 상류 엣지가 없는 입력 목록.
 
-    실측(actual) 들어오는 자재집합과 BOM 기대 입력집합을 legacy 정규화해 비교,
-    빠진 것만 '끊긴 상류(BOM_EXPECTED)'로 반환. (material 단위 비교)
+    OR 경로(route) 인식: 한 경로의 input 이 실측되면 다른 경로는 끊긴 상류로 표시하지
+    않는다(예: Bottle 이 Britestock 으로 제조됐으면 Tablet 은 직접 input 이 아님).
+    어느 경로도 미실측이면 ROUTE_DIRECT(없으면 첫 경로)만 표시해 중복을 막는다.
+    경로 없는(단일) input 은 기존대로 빠진 것만 표시.
     """
     legacy_map = legacy_map or {}
     if bom_expected.empty or nodes_df.empty:
         return []
     node_mat = dict(zip(nodes_df["node"], nodes_df["material"]))
-    # 노드별 실측 incoming 자재(정규화)
     incoming: Dict[str, Set[str]] = {}
     if not actual_edges.empty:
         for to_node, from_mat in zip(actual_edges["to_node"], actual_edges["from_material"]):
             incoming.setdefault(to_node, set()).add(_norm(from_mat, legacy_map))
-    # to_material(정규화) → 기대 from_material 목록
-    exp: Dict[str, Set[str]] = {}
-    for to_m, from_m in zip(bom_expected["to_material"], bom_expected["from_material"]):
-        exp.setdefault(_norm(to_m, legacy_map), set()).add(_norm(from_m, legacy_map))
+
+    has_route = "route" in bom_expected.columns
+    exp_routed: Dict[str, Dict[str, Set[str]]] = {}    # to_material → route → {from}
+    exp_unrouted: Dict[str, Set[str]] = {}             # to_material → {from}
+    for i in range(len(bom_expected)):
+        row = bom_expected.iloc[i]
+        M = _norm(row["to_material"], legacy_map)
+        F = _norm(row["from_material"], legacy_map)
+        rt = (row["route"] if has_route else "") or ""
+        if rt:
+            exp_routed.setdefault(M, {}).setdefault(rt, set()).add(F)
+        else:
+            exp_unrouted.setdefault(M, set()).add(F)
 
     out: List[dict] = []
     seen: Set[Tuple[str, str]] = set()
+
+    def emit(F: str, n: str):
+        if F and F not in incoming.get(n, set()) and (F, n) not in seen:
+            seen.add((F, n))
+            out.append({"from_material": F, "from_tier": tier_from_code(F),
+                        "to_node": n, "to_material": node_mat.get(n, "")})
+
     for n in visited_nodes:
         M = _norm(node_mat.get(n, ""), legacy_map)
         have = incoming.get(n, set())
-        for F in sorted(exp.get(M, set())):
-            if F and F not in have and (F, n) not in seen:
-                seen.add((F, n))
-                out.append({"from_material": F, "from_tier": tier_from_code(F),
-                            "to_node": n, "to_material": node_mat.get(n, "")})
+        for F in sorted(exp_unrouted.get(M, set())):
+            emit(F, n)
+        routes = exp_routed.get(M)
+        if routes:
+            all_routed = {f for s in routes.values() for f in s}
+            if have & all_routed:
+                continue                          # 한 경로 확정 → 다른 경로 표시 안 함
+            shown = routes.get("ROUTE_DIRECT") or next(iter(routes.values()))
+            for F in sorted(shown):
+                emit(F, n)
     return out
 
 

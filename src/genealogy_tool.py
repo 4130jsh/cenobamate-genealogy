@@ -199,6 +199,7 @@ class BomMaster:
     plant_role: Dict[str, str]
     sloc_stage: Dict[Tuple[str, str], str]
     sloc_desc: Dict[Tuple[str, str], str]
+    material_to_routes: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
 
 
 # ============================================================
@@ -256,6 +257,34 @@ class GenealogyTool:
     # Loaders
     # ----------------------------------------------------------
     @staticmethod
+    def parse_input_routes(routes_str: str, material: str, inputs: List[str]) -> Dict[str, List[str]]:
+        """input_routes('코드:ROUTE_DIRECT|코드:ROUTE_VIA_BRITESTOCK')를 {route:[codes]} 로.
+
+        컬럼이 비어 있으면 Bottle(5CNB)에 한해 Tablet(3*)=ROUTE_DIRECT,
+        Britestock(4CNR*)=ROUTE_VIA_BRITESTOCK 로 추론(변경3 호환).
+        """
+        routes: Dict[str, List[str]] = {}
+        if routes_str:
+            for part in routes_str.split("|"):
+                if ":" not in part:
+                    continue
+                code, route = part.rsplit(":", 1)
+                code = clean_code(code); route = clean_str(route)
+                if code and route:
+                    routes.setdefault(route, []).append(code)
+            return routes
+        if material.upper().startswith("5CNB"):
+            for inp in inputs:
+                u = inp.upper()
+                if u.startswith("4CNR"):
+                    routes.setdefault("ROUTE_VIA_BRITESTOCK", []).append(inp)
+                elif u.startswith("3"):
+                    routes.setdefault("ROUTE_DIRECT", []).append(inp)
+            if len(routes) >= 2:   # 단일 경로면 OR 처리 불필요
+                return routes
+        return {}
+
+    @staticmethod
     def load_bom_master(db_path: str) -> BomMaster:
         if not os.path.exists(db_path):
             raise FileNotFoundError(f"BOM SQLite DB not found: {db_path}")
@@ -274,6 +303,8 @@ class GenealogyTool:
 
         material_rows: List[dict] = []
         edge_rows: List[dict] = []
+        material_to_routes: Dict[str, Dict[str, List[str]]] = {}
+        has_routes_col = "input_routes" in bom_tree.columns
         for _, r in bom_tree.iterrows():
             mat = clean_code(r.get("material_code", ""))
             if not mat or mat == "-":
@@ -290,11 +321,18 @@ class GenealogyTool:
                 "note": clean_str(r.get("note", "")),
             })
             inputs = split_material_codes(r.get("input_material_code", ""))
+            # 변경3: OR 경로 메타(input_routes 컬럼) 파싱; 없으면 Bottle(5CNB) 추론
+            routes = GenealogyTool.parse_input_routes(
+                clean_str(r.get("input_routes", "")) if has_routes_col else "", mat, inputs)
+            if routes:
+                material_to_routes[mat] = routes
+            inp_route = {c: rt for rt, codes in routes.items() for c in codes}
             for inp in inputs:
                 if inp == mat:
                     continue
                 edge_rows.append({
                     "from_material": inp, "to_material": mat, "edge_kind": "BOM_EXPECTED", "to_tier": tier,
+                    "route": inp_route.get(inp, ""),
                     "conversion_ratio": clean_str(r.get("conversion_ratio", "")),
                     "conversion_unit": clean_str(r.get("conversion_unit", "")),
                     "note": clean_str(r.get("note", "")),
@@ -323,7 +361,8 @@ class GenealogyTool:
         sloc_desc = {(clean_str(r.get("plant", "")), clean_code(r.get("location", ""))): clean_str(r.get("description", "")) for _, r in sloc.iterrows()}
 
         return BomMaster(material, bom_edges, plant, sloc, legacy, material_to_tier, material_to_desc,
-                         dict(material_to_inputs), legacy_to_current, plant_role, sloc_stage, sloc_desc)
+                         dict(material_to_inputs), legacy_to_current, plant_role, sloc_stage, sloc_desc,
+                         material_to_routes)
 
     @staticmethod
     def tier_from_bom_row(r: pd.Series) -> str:
@@ -1148,8 +1187,14 @@ class GenealogyTool:
             if not inputs:
                 return
             actual_inputs = self.actual_upstream_materials_for_node(to_node, trace_edges)
-            if to_material.startswith("5CNB") and actual_inputs.intersection(set(inputs)):
-                return
+            # 변경3: OR 경로 — 한 경로의 input 이 실측되면 다른 경로는 BOM_EXPECTED 표시 안 함.
+            #   어느 경로도 미실측이면 ROUTE_DIRECT(없으면 첫 경로)만 표시(중복 방지).
+            routes = self.bom.material_to_routes.get(to_material, {})
+            if routes:
+                all_route_inputs = {c for codes in routes.values() for c in codes}
+                if actual_inputs.intersection(all_route_inputs):
+                    return
+                inputs = list(routes.get("ROUTE_DIRECT") or next(iter(routes.values())))
             for inp in inputs:
                 key = (inp, to_node)
                 if key in processed:
