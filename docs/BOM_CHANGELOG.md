@@ -15,6 +15,7 @@
 | 3 | Bottle FP 대체경로(route) 메타 추가 | `bom_tree` 컬럼 2개 + 9행 | 적용됨 |
 | 4 | 1~6번 BOM 탭 전체를 SQLite 테이블로 적재 | sqlite 7개 테이블 | 적용됨 |
 | 5 | BOM tree.md 표에 Input Routes 컬럼 추가 | md §1 표 | 적용됨 |
+| 6 | Physician Sample(5CNB2ZAA1SZZ) 대체경로 추가 | bom_tree 1행 | 적용됨 |
 
 ---
 
@@ -117,6 +118,22 @@ input에 Tablet+Britestock이 함께 있으면 둘 다 투입이 아니라 **한
 - 그 외 행: 빈 셀
 
 > schema.sql은 route 작업 시 이미 재생성되어 최신(별도 수정 불필요).
+
+
+## 변경 6 — Physician Sample(5CNB2ZAA1SZZ) 대체경로 추가
+
+**배경**: `5CNB2ZAA1SZZ`(Cenobamate USA B1 Physician Samples)도 Bottle과 동일하게 2경로를 가짐. 기존엔 단일경로(Tablet 직접)로만 등록됨.
+
+**경로**:
+- ROUTE_DIRECT: `3CNY2Z001ZZZ`(US 50mg Tablet) → Sample
+- ROUTE_VIA_BRITESTOCK: Tablet → `4CNR2ZA001ZZ`(US 50mg Britestock) → Sample
+
+**수정** (`bom_tree` row, 3산출물):
+- `input_material_code`: `3CNY2Z001ZZZ` → `3CNY2Z001ZZZ 4CNR2ZA001ZZ`
+- `input_routes`: `3CNY2Z001ZZZ:ROUTE_DIRECT|4CNR2ZA001ZZ:ROUTE_VIA_BRITESTOCK`
+- `route_note`: 2경로 안내
+
+→ 2경로 자재 총 6종 → **7종**. 도구의 `material_to_routes`가 OR로 자동 인식.
 
 ## bom_tree 최종 컬럼 (참조)
 

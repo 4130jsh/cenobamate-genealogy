@@ -18,13 +18,9 @@ SAP MB51 자재이동 export와 BOM 데이터베이스를 결합해 배치 단�
 ├── CLAUDE.md                  # 이 파일 (프로젝트 컨텍스트)
 ├── README.md                  # 사용자용 개요·실행법
 ├── HANDOFF.md                 # 작업 인수인계 문서 (현재 상태·다음 작업)
-├── requirements.txt           # 엔진 의존성 (pandas/numpy/openpyxl)
-├── requirements-frontend.txt  # frontend 전용 의존성 (streamlit)
+├── requirements.txt           # Python 의존성
 ├── src/
 │   └── genealogy_tool.py      # 메인 추적 도구 (구 v4, 단일 파일)
-├── frontend/                  # [Phase 3] Streamlit 조회 앱 (warehouse 읽기 전용)
-│   ├── app.py                 #   UI (상류 FP→RSM·BOM_EXPECTED 점선, 하류 RSM→FP, 검색/필터)
-│   └── genealogy_db.py        #   DB 로딩·서브그래프·끊긴상류·Graphviz DOT (순수 함수, 테스트됨)
 ├── data/
 │   ├── Cenobamate_BOM_DB_v1.sqlite   # BOM/단가/관세 DB (단일 출처)
 │   ├── Cenobamate_BOM_DB_v1.xlsx     # 동일 내용 Excel (사람 편집용)
@@ -32,6 +28,7 @@ SAP MB51 자재이동 export와 BOM 데이터베이스를 결합해 배치 단�
 │   └── Cenobamate_BOM_Tree_v1.md     # BOM 트리 문서
 ├── docs/
 │   ├── DB_README.md           # DB 구조 상세
+│   ├── BOM_CHANGELOG.md       # BOM 데이터 변경 이력
 │   └── history/               # 설계·검증 이력 (v1~v4)
 └── examples/
     └── run_examples.sh        # 실행 예시 모음
@@ -51,10 +48,19 @@ genealogy 그래프의 **노드 = (material, batch)** 쌍입니다. 같은 batch
 다음은 **변경 금지** 원칙입니다:
 - 노드 정의((material,batch))를 바꾸지 말 것
 - `BOM_EXPECTED`(실측 없는 BOM상 기대 상류)는 실제 엣지와 **분리**해서 표기. 가짜 배치를 만들지 말 것
-- Bottle(`5CNB*`) 등 **OR 경로**(`input_routes`: ROUTE_DIRECT|ROUTE_VIA_BRITESTOCK)는 **택1**. 한 경로가 실측되면 다른 경로는 BOM_EXPECTED로 표시하지 말 것(AND로 되돌리지 말 것). 컬럼 없으면 5CNB는 Tablet/Britestock 추론
 - legacy `1CNZ*` API 코드는 현행 `2CNY*`로 **표시 매핑**만 하고, 없는 RSM 배치를 지어내지 말 것
 - 출력 스키마는 **컬럼 추가만** (기존 CSV/XLSX 소비처가 깨지지 않도록)
 - 신규 동작은 CLI 플래그로 토글, 기본값은 안전 우선
+
+### Bottle FP 대체경로 (route) — 중요
+Bottle SKU(`5CNB*`)는 **OR 대체경로**를 가집니다(AND 아님):
+- **ROUTE_DIRECT**: Tablet(DP `3CNY*`) → Bottle
+- **ROUTE_VIA_BRITESTOCK**: Tablet → Britestock(SP `4CNR*`) → Bottle
+
+DB `bom_tree.input_routes` 컬럼(`코드:ROUTE_DIRECT|코드:ROUTE_VIA_BRITESTOCK`)이 경로를 구분합니다.
+`material_to_routes`(자재→{route:[inputs]})로 로딩되며, `bom_expected_for_nodes`가 이를 OR로 해석합니다:
+한 route의 input이 실측되면 그 route 확정 → 다른 route는 BOM_EXPECTED로 띄우지 않음.
+**이 OR 로직을 AND로 되돌리지 말 것** (두 자재가 동시에 FP에 들어가는 것처럼 처리하면 안 됨).
 
 ## 데이터 흐름
 
@@ -79,56 +85,32 @@ python src/genealogy_tool.py --sap <SAP.xlsx> --bom-db data/Cenobamate_BOM_DB_v1
 # 전 완제품 일괄 추적
 python src/genealogy_tool.py --sap <SAP.xlsx> --bom-db data/Cenobamate_BOM_DB_v1.sqlite \
   --trace-scope all-fp --direction upstream --html --export-xlsx --out out
-
-# [Phase 2] 수시 적재: 새 MB51 export 를 누적 store 에 idempotent 누적 (자연키 dedup)
-python src/genealogy_tool.py --sap <NEW_MB51.xlsx> --bom-db data/Cenobamate_BOM_DB_v1.sqlite \
-  --store warehouse.sqlite --ingest
-
-# [Phase 2] 누적분 전체로 빌드 + 결과 DB화 (frontend 가 읽을 warehouse)
-python src/genealogy_tool.py --from-store --store warehouse.sqlite \
-  --bom-db data/Cenobamate_BOM_DB_v1.sqlite --out out --write-db warehouse.sqlite --db-replace
-
-# [Phase 2] 적재+재빌드+결과DB화 한 명령 (새 파일 폴더에 넣고 실행; 중복 자동 무시)
-#   주의: data/ 에 파일만 넣는다고 적재되지 않음 — 반드시 --ingest 필요
-python src/genealogy_tool.py --ingest --from-store --sap "data/sap/EXPORT_*.xlsx" \
-  --store data/warehouse.sqlite --bom-db data/Cenobamate_BOM_DB_v1.sqlite \
-  --out out/store --write-db data/warehouse.sqlite --db-replace
-# (Windows 헬퍼: scripts/refresh.ps1)
-```
-
-데이터 제품 로드맵: ①수시 적재(`--ingest`, raw_sap_rows 누적) → ②엔진 빌드(`--from-store`) →
-③결과 DB화(`--write-db`, gen_*·build_runs·v_latest_*) → ④Streamlit frontend(`frontend/app.py`).
-warehouse sqlite 하나가 raw 누적·결과·빌드이력을 모두 보유(향후 Postgres 이전 가능 스키마).
-
-```bash
-# [Phase 3] frontend 실행 (warehouse 의 v_latest_* 를 읽어 FP→RSM 상류 그래프 조회)
-pip install -r requirements-frontend.txt
-streamlit run frontend/app.py   # 사이드바에서 warehouse 경로 지정 (기본 data/warehouse.sqlite)
 ```
 
 주요 플래그: `--direction upstream|downstream|both`, `--max-depth N`, `--strict-dates`,
-`--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`,
-`--pairing-mode bom-aware|legacy`(다중 output 생산 페어링 점수식; 기본 bom-aware=BOM 토폴로지 우선, legacy=구 item-순서 하위호환),
-`--store PATH`·`--ingest`·`--from-store`(Phase 2 누적 store), `--write-db PATH`·`--db-replace`(결과 DB화),
-`--legacy-transfer-pairing`(구 transfer 페어링 복원; 기본은 같은 tier 다른 strength 가짜 전환 차단),
-`--no-net-reversals`(reversal 넷팅 끄기; 기본은 취소된 원본 문서를 엣지에서 무효화)
+`--include-reversals`, `--no-split-matching`, `--batch-list FILE`, `--trace-scope all-fp|all-leaf|all`, `--html`, `--export-xlsx`
 
 ## 검증 방법 (코드 수정 후 반드시)
 
 실제 SAP export는 리포에 없습니다(민감 데이터). 코드 수정 시:
 1. 구문 점검: `python -c "import ast; ast.parse(open('src/genealogy_tool.py').read())"`
 2. BOM DB 로딩 검증: DB로 `load_bom_master`가 정상 동작하는지
-3. 스모크/회귀 테스트: `python tests/test_smoke.py` (합성 SAP fixture `tests/synth_sap.py`로
-   엣지 3규칙·날짜위반·strict-dates·tier분류·상류추적·BOM_EXPECTED분리·다중output페어링·
-   결과DB화·store적재idempotency 검증)
-4. frontend 데이터계층: `python tests/test_frontend.py` (warehouse 로딩·FP→RSM 상류 서브그래프·DOT 생성)
-5. 회귀: tier 분류·생산 페어링·분할매칭·잔차·날짜위반이 유지되는지
+3. 합성 데이터로 단위검증 (과거 `docs/history/`의 검증 케이스 참고)
+4. 회귀: tier 분류·생산 페어링·분할매칭·잔차·날짜위반이 유지되는지
 
 ## 알려진 제약
 
 - 단일 기간 export에서는 상류 이력이 끊겨 `BOM_EXPECTED`가 많이 뜨는 게 **정상**(데이터 범위 한계).
 - UoM(kg/EA 등) 환산 테이블은 없음. 현재는 동일 UoM만 분할 매칭.
 - 엣지 빌드는 v4에서 dict 기반으로 최적화됨(7000행 ~1.5초).
+
+## 문서
+
+- `CLAUDE.md` — 이 파일
+- `HANDOFF.md` — 현재 상태·다음 작업
+- `docs/BOM_CHANGELOG.md` — **BOM 데이터 변경 이력** (레거시 코드·Britestock 수정·route 메타). BOM 수정 시 반드시 갱신.
+- `docs/DB_README.md` — DB 구조 상세
+- `docs/history/` — 코드 개선·검증 이력
 
 ## 코드 스타일
 
