@@ -134,6 +134,19 @@ def test_bottle_or_route_frontend():
     assert "3CNY2Z001ZZZ" not in bot_miss, f"Bottle OR경로인데 Tablet 이 끊긴상류로 표시됨: {bot_miss}"
 
 
+def test_single_route_bottle_actual_suppresses_frontend():
+    # frontend: 단일경로 Bottle 이 Britestock(BOM 누락 경로)으로 제조됐어도 실제 상류 있으면
+    # Tablet 끊긴상류 점선 안 뜸
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    bexp = gdb.load_bom_expected(db); legacy = gdb.load_legacy_map(db)
+    start = "5CNB2ZAA1SZZ||PSAMP"
+    sub, vis, _ = gdb.trace_subgraph(edges, start, "upstream")
+    miss = gdb.expected_missing(vis, edges, bexp, nodes, legacy)
+    ps_miss = {m["from_material"] for m in miss if m["to_node"] == start}
+    assert "3CNY2Z001ZZZ" not in ps_miss, f"실제 상류 있는데 Tablet 끊긴상류로 표시됨: {ps_miss}"
+
+
 def test_legacy_map_loaded():
     db = _warehouse()
     lm = gdb.load_legacy_map(db)

@@ -164,6 +164,14 @@ def build_rows() -> list[dict]:
         _row("DOC_BOT", 2, "5CNB2ZAA1ZZZ", "BOT", "5100", 101, +50.0, "2026-12-02"),
     ]
 
+    # --- 케이스 14: 단일경로(ROUTE_DIRECT) Bottle 이 실제로는 Britestock 으로 제조 ---
+    # 5CNB2ZAA1SZZ BOM 경로 = ROUTE_DIRECT(Tablet) 뿐인데, 실제 상류는 Britestock(4CNR2).
+    # 실제 상류 엣지가 있으므로 Tablet 을 BOM 기대로 표시하면 안 됨(경로 BOM 누락 케이스).
+    r += [
+        _row("DOC_PS", 1, "4CNR2ZA001ZZ", "BRITS", "4100", 543, -50.0, "2026-12-15"),
+        _row("DOC_PS", 2, "5CNB2ZAA1SZZ", "PSAMP", "5100", 101, +50.0, "2026-12-15"),
+    ]
+
     # --- 케이스 13: 배송 출고(911)/취소(912) — 같은 Bottle 다른 배치, 같은 Reference ---
     # 판매/출하 이동이라 계보와 무관. 같은 Reference 로 911(음수)↔912(양수)가 REF_PO_ITEM
     # 으로 짝지어져 가짜 전환(BOTX↔BOTY)을 만들면 안 됨 → 제외 movement 로 차단.

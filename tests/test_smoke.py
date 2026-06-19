@@ -160,6 +160,17 @@ def test_delivery_movements_excluded():
     assert bad.empty, f"배송(911/912) 가짜 전환 엣지 생성됨: {list(zip(bad.from_batch, bad.to_batch))}"
 
 
+def test_route_material_actual_upstream_suppresses_expected():
+    # 단일경로 Bottle 이 BOM 누락 경로(Britestock)로 제조됐어도 실제 상류가 있으면
+    # Tablet 이 BOM 기대로 뜨면 안 됨
+    tool, _ = _build()
+    assert _has_edge(tool, "PROD", "BRITS", "PSAMP"), "Britestock→Physician Sample 엣지 누락"
+    _, _, _, be, _ = tool.trace(batch="PSAMP", material="5CNB2ZAA1SZZ", direction="upstream", max_depth=12)
+    bot = be[be["to_material"] == "5CNB2ZAA1SZZ"] if not be.empty else be
+    exp = set(bot["from_material_expected"]) if not bot.empty else set()
+    assert "3CNY2Z001ZZZ" not in exp, f"실제 상류 있는데 Tablet 이 BOM 기대로 표시됨: {exp}"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함
