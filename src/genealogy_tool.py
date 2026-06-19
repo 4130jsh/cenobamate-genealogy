@@ -1192,7 +1192,10 @@ class GenealogyTool:
             routes = self.bom.material_to_routes.get(to_material, {})
             if routes:
                 all_route_inputs = {c for codes in routes.values() for c in codes}
-                if actual_inputs.intersection(all_route_inputs):
+                real_incoming = {m for m in actual_inputs if m and m != to_material}
+                # 정의된 경로가 실측되거나, BOM에 없는 경로(예: 누락된 Britestock)라도
+                # 실제 상류 엣지가 있으면 계보 확정 → BOM_EXPECTED 표시 안 함
+                if actual_inputs.intersection(all_route_inputs) or real_incoming:
                     return
                 inputs = list(routes.get("ROUTE_DIRECT") or next(iter(routes.values())))
             for inp in inputs:

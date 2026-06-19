@@ -192,8 +192,10 @@ def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_ex
         routes = exp_routed.get(M)
         if routes:
             all_routed = {f for s in routes.values() for f in s}
-            if have & all_routed:
-                continue                          # 한 경로 확정 → 다른 경로 표시 안 함
+            real_incoming = {m for m in have if m and m != M}
+            # 정의된 경로 실측 OR BOM 누락 경로라도 실제 상류 엣지가 있으면 확정 → 표시 안 함
+            if (have & all_routed) or real_incoming:
+                continue
             shown = routes.get("ROUTE_DIRECT") or next(iter(routes.values()))
             for F in sorted(shown):
                 emit(F, n)
