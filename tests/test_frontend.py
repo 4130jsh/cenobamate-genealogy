@@ -122,6 +122,18 @@ def test_expected_missing_and_dot():
     assert "BOM 기대" in dot and "dashed" in dot
 
 
+def test_bottle_or_route_frontend():
+    # frontend 끊긴상류: Britestock 경유 Bottle 의 Tablet 은 점선(BOM기대)으로 뜨면 안 됨
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    bexp = gdb.load_bom_expected(db); legacy = gdb.load_legacy_map(db)
+    start = "5CNB2ZAA1ZZZ||BOT"
+    sub, vis, _ = gdb.trace_subgraph(edges, start, "upstream")
+    miss = gdb.expected_missing(vis, edges, bexp, nodes, legacy)
+    bot_miss = {m["from_material"] for m in miss if m["to_node"] == start}
+    assert "3CNY2Z001ZZZ" not in bot_miss, f"Bottle OR경로인데 Tablet 이 끊긴상류로 표시됨: {bot_miss}"
+
+
 def test_legacy_map_loaded():
     db = _warehouse()
     lm = gdb.load_legacy_map(db)

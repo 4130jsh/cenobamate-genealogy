@@ -51,6 +51,7 @@ genealogy 그래프의 **노드 = (material, batch)** 쌍입니다. 같은 batch
 다음은 **변경 금지** 원칙입니다:
 - 노드 정의((material,batch))를 바꾸지 말 것
 - `BOM_EXPECTED`(실측 없는 BOM상 기대 상류)는 실제 엣지와 **분리**해서 표기. 가짜 배치를 만들지 말 것
+- Bottle(`5CNB*`) 등 **OR 경로**(`input_routes`: ROUTE_DIRECT|ROUTE_VIA_BRITESTOCK)는 **택1**. 한 경로가 실측되면 다른 경로는 BOM_EXPECTED로 표시하지 말 것(AND로 되돌리지 말 것). 컬럼 없으면 5CNB는 Tablet/Britestock 추론
 - legacy `1CNZ*` API 코드는 현행 `2CNY*`로 **표시 매핑**만 하고, 없는 RSM 배치를 지어내지 말 것
 - 출력 스키마는 **컬럼 추가만** (기존 CSV/XLSX 소비처가 깨지지 않도록)
 - 신규 동작은 CLI 플래그로 토글, 기본값은 안전 우선

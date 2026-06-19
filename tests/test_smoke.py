@@ -141,6 +141,16 @@ def test_po_item_pairing_in_multi_output():
     assert not _has_edge(tool, "PROD", "API-P", "DP-Q"), "API-P 가 PO-item 무시하고 DP-Q 로 오결합"
 
 
+def test_bottle_or_route_suppresses_tablet():
+    # Bottle 이 Britestock 경유로 제조되면(VIA 실측) Tablet 은 Bottle 의 BOM_EXPECTED 가 아님
+    tool, _ = _build()
+    assert _has_edge(tool, "PROD", "BRIT", "BOT"), "Britestock→Bottle 엣지 누락"
+    _, _, _, be, _ = tool.trace(batch="BOT", material="5CNB2ZAA1ZZZ", direction="upstream", max_depth=12)
+    bot_exp = be[be["to_material"] == "5CNB2ZAA1ZZZ"] if not be.empty else be
+    expmats = set(bot_exp["from_material_expected"]) if not bot_exp.empty else set()
+    assert "3CNY2Z001ZZZ" not in expmats, f"Britestock 경로인데 Tablet 이 BOM 기대로 표시됨: {expmats}"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함

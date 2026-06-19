@@ -152,6 +152,17 @@ def build_rows() -> list[dict]:
         _row("DOC_POI", 3, "3CNY0Z001ZZZ", "DP-P", "3100", 101, +50.0, "2026-11-01", po="POX", po_item="P1"),
         _row("DOC_POI", 4, API, "API-Q", "1104", 543, -50.0, "2026-11-01", po="POX", po_item="P2"),
     ]
+
+    # --- 케이스 12: Bottle OR 경로 — Britestock 경유 (Tablet 은 직접 input 아님) ---
+    # 5CNB2ZAA1ZZZ(Bottle) BOM input = 3CNY2Z001ZZZ(Tablet, ROUTE_DIRECT) | 4CNR2ZA001ZZ(Britestock, VIA).
+    # 여기선 Tablet→Britestock→Bottle 로 제조(VIA 경로 실측) → Tablet 은 Bottle 의 BOM_EXPECTED 로
+    # 뜨면 안 되고 Britestock 의 상류로 추적돼야 한다.
+    r += [
+        _row("DOC_BRIT", 1, "3CNY2Z001ZZZ", "DPB", "3100", 543, -50.0, "2026-12-01"),
+        _row("DOC_BRIT", 2, "4CNR2ZA001ZZ", "BRIT", "4100", 101, +50.0, "2026-12-01"),
+        _row("DOC_BOT", 1, "4CNR2ZA001ZZ", "BRIT", "4100", 543, -50.0, "2026-12-02"),
+        _row("DOC_BOT", 2, "5CNB2ZAA1ZZZ", "BOT", "5100", 101, +50.0, "2026-12-02"),
+    ]
     return r
 
 
