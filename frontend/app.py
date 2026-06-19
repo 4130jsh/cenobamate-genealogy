@@ -16,6 +16,7 @@ import os
 import sys
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import genealogy_db as gdb  # noqa: E402
@@ -164,13 +165,20 @@ def _edge_table(sub):
 
 
 def _graph_with_downloads(dot: str, title: str, key: str) -> None:
-    """그래프 렌더 + 전체 캡처용 다운로드(HTML/DOT)·복사."""
-    st.graphviz_chart(dot, use_container_width=True)
-    c1, c2 = st.columns(2)
-    c1.download_button("⬇️ 전체 그래프 HTML (한 화면 캡처용)", gdb.dot_to_html(dot, title),
+    """인터랙티브 그래프(휠 확대/축소·드래그 이동) + 전체 캡처용 다운로드(HTML/DOT)·복사."""
+    c1, c2 = st.columns([3, 1])
+    height = c1.slider("그래프 높이(px)", 400, 1400, 640, 20, key=f"gh_{key}")
+    interactive = c2.checkbox("확대/축소", value=True, key=f"gi_{key}",
+                              help="휠=확대/축소, 드래그=이동 (인터넷 필요). 끄면 정적 이미지")
+    if interactive:
+        components.html(gdb.dot_to_html(dot, title), height=height + 8, scrolling=False)
+    else:
+        st.graphviz_chart(dot, use_container_width=True)
+    d1, d2 = st.columns(2)
+    d1.download_button("⬇️ 전체 그래프 HTML (한 화면 캡처용)", gdb.dot_to_html(dot, title),
                        file_name=f"{key}.html", mime="text/html", key=f"dlh_{key}",
                        use_container_width=True)
-    c2.download_button("⬇️ DOT 소스", dot, file_name=f"{key}.dot",
+    d2.download_button("⬇️ DOT 소스", dot, file_name=f"{key}.dot",
                        mime="text/vnd.graphviz", key=f"dld_{key}", use_container_width=True)
     with st.expander("DOT 소스 복사(붙여넣어 외부 렌더 가능)"):
         st.code(dot, language="dot")
