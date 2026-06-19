@@ -86,6 +86,13 @@ python src/genealogy_tool.py --sap <NEW_MB51.xlsx> --bom-db data/Cenobamate_BOM_
 # [Phase 2] 누적분 전체로 빌드 + 결과 DB화 (frontend 가 읽을 warehouse)
 python src/genealogy_tool.py --from-store --store warehouse.sqlite \
   --bom-db data/Cenobamate_BOM_DB_v1.sqlite --out out --write-db warehouse.sqlite --db-replace
+
+# [Phase 2] 적재+재빌드+결과DB화 한 명령 (새 파일 폴더에 넣고 실행; 중복 자동 무시)
+#   주의: data/ 에 파일만 넣는다고 적재되지 않음 — 반드시 --ingest 필요
+python src/genealogy_tool.py --ingest --from-store --sap "data/sap/EXPORT_*.xlsx" \
+  --store data/warehouse.sqlite --bom-db data/Cenobamate_BOM_DB_v1.sqlite \
+  --out out/store --write-db data/warehouse.sqlite --db-replace
+# (Windows 헬퍼: scripts/refresh.ps1)
 ```
 
 데이터 제품 로드맵: ①수시 적재(`--ingest`, raw_sap_rows 누적) → ②엔진 빌드(`--from-store`) →
