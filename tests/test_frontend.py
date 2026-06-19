@@ -110,13 +110,11 @@ def test_expected_missing_and_dot():
     start = "5CNT014A1ZZZ||FP-B1"
     sub, visited, _ = gdb.trace_subgraph(edges, start, "upstream")
     miss = gdb.expected_missing(visited, edges, bexp, nodes, legacy)
-    # API-B1 의 BOM 입력 중 실측 없는 RSM(1CNY001N/1CNY002)이 끊긴 상류로 떠야 함
+    # FP-B1(Card)의 SP 2종(AND) 중 실측 없는 4CNS1Z2001ZZ 이 끊긴 상류로 떠야 함
     expmats = {m["from_material"] for m in miss}
-    assert any(x in expmats for x in ("1CNY001NZZZZ", "1CNY002ZZZZZ")), f"BOM 기대 누락 미검출: {expmats}"
-    # 실측이 있는 1CNY001ZZZZZ 는 끊긴 상류로 뜨면 안 됨
-    api_node = "2CNY001ZZZZZ||API-B1"
-    api_miss = {m["from_material"] for m in miss if m["to_node"] == api_node}
-    assert "1CNY001ZZZZZ" not in api_miss, "실측 있는 상류가 BOM 기대로 잘못 분류됨"
+    assert "4CNS1Z2001ZZ" in expmats, f"BOM 기대 누락 미검출: {expmats}"
+    # 실측이 있는 4CNS0Z2001ZZ 는 끊긴 상류로 뜨면 안 됨
+    assert "4CNS0Z2001ZZ" not in expmats, "실측 있는 상류가 BOM 기대로 잘못 분류됨"
     # DOT 에 점선 기대 노드가 들어가야 함
     dot = gdb.build_dot(sub, nodes, start, "upstream", expected=miss)
     assert "BOM 기대" in dot and "dashed" in dot
@@ -163,6 +161,19 @@ def test_node_label_has_description():
     # API-B1 노드 라벨에 자재 설명이 포함돼야 함
     assert "Cenobamate API_US" in dot, "노드 라벨에 자재 설명이 안 들어감"
     assert "[API-B1]" in dot, "배치는 [..] 형태로 라벨에 있어야 함"
+
+
+def test_interchangeable_group_frontend():
+    # frontend: API RSM 호환그룹 중 하나(1CNY001) 실측되면 나머지(1CNY001N/1CNY002) 점선 안 뜸
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    bexp = gdb.load_bom_expected(db); legacy = gdb.load_legacy_map(db)
+    start = "2CNY001ZZZZZ||API-B1"
+    sub, vis, _ = gdb.trace_subgraph(edges, start, "upstream")
+    miss = gdb.expected_missing(vis, edges, bexp, nodes, legacy)
+    api_miss = {m["from_material"] for m in miss if m["to_node"] == start}
+    assert not ({"1CNY001NZZZZ", "1CNY002ZZZZZ"} & api_miss), \
+        f"호환 RSM 그룹 중 하나 실측됐는데 나머지가 끊긴상류로 뜸: {api_miss}"
 
 
 def test_transfer_in_node_no_bom_expected():

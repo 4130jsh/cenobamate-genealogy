@@ -209,6 +209,17 @@ def test_no_self_loop_edges():
     assert e[(e["from_batch"] == "SLB") & (e["to_batch"] == "SLB")].empty, "SLB 위치이동이 self-loop 엣지로 생성됨"
 
 
+def test_interchangeable_rsm_group_any_satisfies():
+    # API 2CNY001 의 RSM 3종(호환그룹): 하나라도 실측되면 나머지는 BOM_EXPECTED 로 안 뜸
+    tool, _ = _build()
+    # API-B1 은 1CNY001ZZZZZ(RSM-B1) 실측 → 1CNY001N/1CNY002 는 기대로 뜨면 안 됨
+    _, _, _, be, _ = tool.trace(batch="API-B1", material="2CNY001ZZZZZ", direction="upstream", max_depth=12)
+    api_exp = be[be["to_material"] == "2CNY001ZZZZZ"] if not be.empty else be
+    expmats = set(api_exp["from_material_expected"]) if not api_exp.empty else set()
+    assert not ({"1CNY001NZZZZ", "1CNY002ZZZZZ"} & expmats), \
+        f"호환 RSM 그룹 중 하나 실측됐는데 나머지가 BOM 기대로 뜸: {expmats}"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함
@@ -237,16 +248,16 @@ def test_upstream_trace_chain():
 
 def test_bom_expected_separated_from_actual():
     tool, _ = _build()
-    # API-B1 의 BOM 입력 중 실측 없는 상류(1CNY002 등)는 BOM_EXPECTED 로만 떠야 함
+    # FP-B1(Card 5CNT014A1ZZZ)은 SP 2종(4CNS0/4CNS1) AND 입력 중 4CNS0 만 실측 → 4CNS1 이 BOM_EXPECTED
     _, _, _, bom_expected, _ = tool.trace(
-        batch="API-B1", material="2CNY001ZZZZZ", direction="upstream", max_depth=12)
-    assert not bom_expected.empty, "API-B1 의 실측 없는 BOM 상류가 BOM_EXPECTED 로 안 뜸"
+        batch="FP-B1", material="5CNT014A1ZZZ", direction="upstream", max_depth=12)
+    assert not bom_expected.empty, "FP-B1 의 실측 없는 BOM 상류가 BOM_EXPECTED 로 안 뜸"
     # BOM_EXPECTED 는 status 컬럼으로 식별되며, 실제 엣지(edge_kind)와 분리돼 있어야 함
     assert "status" in bom_expected.columns and "edge_kind" not in bom_expected.columns, \
         "BOM_EXPECTED 가 실제 엣지 스키마와 섞임"
     assert bom_expected["status"].str.startswith("BOM_EXPECTED").all(), "BOM_EXPECTED 외 status 혼입"
-    # 실측이 존재하는 상류(1CNY001ZZZZZ)는 BOM_EXPECTED 에 들어오면 안 됨
-    assert "1CNY001ZZZZZ" not in set(bom_expected["from_material_expected"]), \
+    # 실측이 존재하는 상류(4CNS0Z2001ZZ)는 BOM_EXPECTED 에 들어오면 안 됨
+    assert "4CNS0Z2001ZZ" not in set(bom_expected["from_material_expected"]), \
         "실측 있는 상류가 BOM_EXPECTED 로 잘못 분류됨"
 
 

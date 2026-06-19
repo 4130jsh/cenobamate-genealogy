@@ -164,15 +164,20 @@ def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_ex
             incoming.setdefault(to_node, set()).add(_norm(from_mat, legacy_map))
 
     has_route = "route" in bom_expected.columns
-    exp_routed: Dict[str, Dict[str, Set[str]]] = {}    # to_material → route → {from}
+    has_group = "input_group" in bom_expected.columns
+    exp_routed: Dict[str, Dict[str, Set[str]]] = {}    # to_material → route → {from} (공정 경로 OR)
+    exp_grouped: Dict[str, Dict[str, Set[str]]] = {}   # to_material → group → {from} (호환 원료 OR)
     exp_unrouted: Dict[str, Set[str]] = {}             # to_material → {from}
     for i in range(len(bom_expected)):
         row = bom_expected.iloc[i]
         M = _norm(row["to_material"], legacy_map)
         F = _norm(row["from_material"], legacy_map)
         rt = (row["route"] if has_route else "") or ""
+        ig = (row["input_group"] if has_group else "") or ""
         if rt:
             exp_routed.setdefault(M, {}).setdefault(rt, set()).add(F)
+        elif ig:
+            exp_grouped.setdefault(M, {}).setdefault(ig, set()).add(F)
         else:
             exp_unrouted.setdefault(M, set()).add(F)
 
@@ -207,6 +212,11 @@ def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_ex
             shown = routes.get("ROUTE_DIRECT") or next(iter(routes.values()))
             for F in sorted(shown):
                 emit(F, n)
+        # 호환 원료 그룹(ANY_OR_COMBO): 멤버 중 하나라도 실측이면 그룹 전체 표시 안 함; 없으면 대표 1개
+        for members in (exp_grouped.get(M) or {}).values():
+            if have & members:
+                continue
+            emit(sorted(members)[0], n)
     return out
 
 

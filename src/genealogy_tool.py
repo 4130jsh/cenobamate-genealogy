@@ -200,6 +200,7 @@ class BomMaster:
     sloc_stage: Dict[Tuple[str, str], str]
     sloc_desc: Dict[Tuple[str, str], str]
     material_to_routes: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
+    material_to_input_groups: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
 
 
 # ============================================================
@@ -258,6 +259,22 @@ class GenealogyTool:
     # Loaders
     # ----------------------------------------------------------
     @staticmethod
+    def parse_input_group(group_str: str) -> Dict[str, List[str]]:
+        """input_group('코드,코드,코드:그룹명' | 다중 그룹 '|' 구분)를 {그룹명:[codes]} 로."""
+        groups: Dict[str, List[str]] = {}
+        if not group_str:
+            return groups
+        for part in group_str.split("|"):
+            if ":" not in part:
+                continue
+            codes_str, name = part.rsplit(":", 1)
+            codes = [clean_code(c) for c in codes_str.split(",") if clean_code(c)]
+            name = clean_str(name)
+            if codes and name:
+                groups[name] = codes
+        return groups
+
+    @staticmethod
     def parse_input_routes(routes_str: str, material: str, inputs: List[str]) -> Dict[str, List[str]]:
         """input_routes('코드:ROUTE_DIRECT|코드:ROUTE_VIA_BRITESTOCK')를 {route:[codes]} 로.
 
@@ -305,7 +322,9 @@ class GenealogyTool:
         material_rows: List[dict] = []
         edge_rows: List[dict] = []
         material_to_routes: Dict[str, Dict[str, List[str]]] = {}
+        material_to_input_groups: Dict[str, Dict[str, List[str]]] = {}
         has_routes_col = "input_routes" in bom_tree.columns
+        has_group_col = "input_group" in bom_tree.columns
         for _, r in bom_tree.iterrows():
             mat = clean_code(r.get("material_code", ""))
             if not mat or mat == "-":
@@ -328,12 +347,17 @@ class GenealogyTool:
             if routes:
                 material_to_routes[mat] = routes
             inp_route = {c: rt for rt, codes in routes.items() for c in codes}
+            # 호환 원료 그룹(input_group: '코드,코드:그룹명') — ANY_OR_COMBO
+            groups = GenealogyTool.parse_input_group(clean_str(r.get("input_group", "")) if has_group_col else "")
+            if groups:
+                material_to_input_groups[mat] = groups
+            inp_group = {c: gn for gn, codes in groups.items() for c in codes}
             for inp in inputs:
                 if inp == mat:
                     continue
                 edge_rows.append({
                     "from_material": inp, "to_material": mat, "edge_kind": "BOM_EXPECTED", "to_tier": tier,
-                    "route": inp_route.get(inp, ""),
+                    "route": inp_route.get(inp, ""), "input_group": inp_group.get(inp, ""),
                     "conversion_ratio": clean_str(r.get("conversion_ratio", "")),
                     "conversion_unit": clean_str(r.get("conversion_unit", "")),
                     "note": clean_str(r.get("note", "")),
@@ -363,7 +387,7 @@ class GenealogyTool:
 
         return BomMaster(material, bom_edges, plant, sloc, legacy, material_to_tier, material_to_desc,
                          dict(material_to_inputs), legacy_to_current, plant_role, sloc_stage, sloc_desc,
-                         material_to_routes)
+                         material_to_routes, material_to_input_groups)
 
     @staticmethod
     def tier_from_bom_row(r: pd.Series) -> str:
@@ -1227,6 +1251,16 @@ class GenealogyTool:
                 if actual_inputs.intersection(all_route_inputs) or real_incoming:
                     return
                 inputs = list(routes.get("ROUTE_DIRECT") or next(iter(routes.values())))
+            # 호환 원료 그룹(ANY_OR_COMBO): 그룹 멤버 중 하나라도 실측이면 그룹 멤버 전부 표시 안 함;
+            #   아무도 실측 안 됐으면 그룹별 대표 1개만 남김
+            groups = self.bom.material_to_input_groups.get(to_material, {})
+            if groups:
+                all_group_inputs = {c for codes in groups.values() for c in codes}
+                if actual_inputs.intersection(all_group_inputs):
+                    inputs = [i for i in inputs if i not in all_group_inputs]
+                else:
+                    reps = {codes[0] for codes in groups.values() if codes}
+                    inputs = [i for i in inputs if i not in all_group_inputs or i in reps]
             for inp in inputs:
                 key = (inp, to_node)
                 if key in processed:
