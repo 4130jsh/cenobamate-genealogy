@@ -6,72 +6,78 @@
 
 ## 1. BOM Tree
 
-| Level | Material Type | Material Code | Material Description | Batch Size / (CMO A) | Batch Size / (CMO B) | Unit | CMO A | CMO B | Input Material / Code | Input Material / Description | Conversion / Ratio | Conversion / Unit | Note | SAP Plant (CMO A) | SLoc (CMO A) | SAP Plant (CMO B) | SLoc (CMO B) |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | Raw Material | 1CNY001ZZZZZ | YKP1941_US | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | US API Input Option A / 3종 RSM 상호 대체 가능 (Interchangeable) | 1100 | 1101 | 1100 | 1102 |
-| 0 | Raw Material | 1CNY001NZZZZ | YKP1941_US_New | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | US API Input Option B / 신규 공정 적용 자재 / 3종 RSM 상호 대체 가능 | 1100 | 1101 | 1100 | 1102 |
-| 0 | Raw Material | 1CNY002ZZZZZ | YKP1941_EU | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | EU API 전용 Input / US API Input Option C로도 사용 가능 / 3종 RSM 상호 대체 가능 | 1100 | 1101 | 1100 | 1102 |
-| 1 | API | 2CNY001ZZZZZ | Cenobamate API_US_Subcontract | 482 | - | KG | SK biotek | - | 1CNY001ZZZZZ / / 1CNY001NZZZZ / / 1CNY002ZZZZZ | YKP1941_US / / YKP1941_US_New / / YKP1941_EU | 0.861 | KG/KG | 실제 합성 공정 / RSM 3종 중 택1 투입 | 1100 | V202 | - | - |
-| 1 | API | 2CNY002ZZZZZ | Cenobamate API_EU_Subcontract | 482 | - | KG | SK biotek | - | 1CNY002ZZZZZ | YKP1941_EU | 0.861 | KG/KG | 실제 합성 공정 / EU RSM만 사용 | 1100 | V202 | - | - |
-| 1 | API | 2CNY004ZZZZZ | Cenobamate API_ROW1_Subcontract | 482 | - | KG | SK biotek | - | 2CNY001ZZZZZ | Cenobamate API_US | 1 | KG/KG | ⚠ 코드 변환만 (물리적 공정 없음) / US API → ROW1 API 코드 변환 | 1100 | V202 | - | - |
-| 1 | API | 2CNY005ZZZZZ | Cenobamate API_CA_Subcontract | 482 | - | KG | SK biotek | - | 2CNY002ZZZZZ | Cenobamate API_EU | 1 | KG/KG | ⚠ 코드 변환만 (물리적 공정 없음) / EU API → CA API 코드 변환 | 1100 | V202 | - | - |
-| 2 | Drug Product | 3CNY0Z001ZZZ | Cenobamate(US) 12.5mg_Tablet | 400000 | 200000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 80000 | TAB/KG | Common Blend: API 40kg 중 5kg 분량 → 1배치 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY1Z001ZZZ | Cenobamate(US) 25mg_Tablet | 400000 | 200000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 40000 | TAB/KG | Common Blend: API 40kg 중 10kg 분량 → 1배치 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY2Z001ZZZ | Cenobamate(US) 50mg_Tablet | 500000 | 800000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 20000 | TAB/KG | Common Blend: API 40kg 중 25kg 분량 → 1배치 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY2Z001ZZZ | Cenobamate(US) 50mg_Tablet [Scale-up] | 800000 | - | - | Patheon | Avara | - | - | 20000 | TAB/KG | 50mg 단독 Scale-up 생산 / SAP 코드 동일, Desc.으로 구분 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY3Z001ZZZ | Cenobamate(US) 100mg_Tablet | 800000 | 800000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 10000 | TAB/KG | 단독 제조 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY4Z001ZZZ | Cenobamate(US) 150mg_Tablet | 533333 | 533333 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 6666.66 | TAB/KG | 단독 제조 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY5Z001ZZZ | Cenobamate(US) 200mg_Tablet | 400000 | 1200000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 5000 | TAB/KG | 단독 제조 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY0Z004ZZZ | Cenobamate(CA) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 80000 | TAB/KG | Avara: US 전용 (CA 미승인) | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY1Z004ZZZ | Cenobamate(CA) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 40000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY2Z004ZZZ | Cenobamate(CA) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 20000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY3Z004ZZZ | Cenobamate(CA) 100mg_Tablet | 800000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 10000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY4Z004ZZZ | Cenobamate(CA) 150mg_Tablet | 533333 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 6666.66 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY5Z004ZZZ | Cenobamate(CA) 200mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 5000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY0Z005ZZZ | Cenobamate(IL) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 80000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY1Z005ZZZ | Cenobamate(IL) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_ROW1 | 40000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY2Z005ZZZ | Cenobamate(IL) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 20000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY3Z005ZZZ | Cenobamate(IL) 100mg_Tablet | 800000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 10000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY4Z005ZZZ | Cenobamate(IL) 150mg_Tablet | 533333 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 6666.66 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY5Z005ZZZ | Cenobamate(IL) 200mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 5000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY0Z006ZZZ | Cenobamate(HK) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 80000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY1Z006ZZZ | Cenobamate(HK) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 40000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY2Z006ZZZ | Cenobamate(HK) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 20000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY3Z006ZZZ | Cenobamate(HK) 100mg_Tablet | 800000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 10000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY4Z006ZZZ | Cenobamate(HK) 150mg_Tablet | 533333 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 6666.66 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY5Z006ZZZ | Cenobamate(HK) 200mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 5000 | TAB/KG | - | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY0Z007ZZZ | Cenobamate(CN) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 80000 | TAB/KG | CN Common Blend: API 40kg 중 5kg×3배치=15kg | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY1Z007ZZZ | Cenobamate(CN) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 40000 | TAB/KG | CN Common Blend에 미포함 / 별도 단독 생산 시 해당 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY2Z007ZZZ | Cenobamate(CN) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 20000 | TAB/KG | CN Common Blend: API 40kg 중 25kg → 1배치 | 1210 | V301 | 1310 | V301 |
-| 2 | Drug Product | 3CNY2Z007ZZZ | Cenobamate(CN) 50mg_Tablet [Scale-up] | 800000 | - | - | Patheon | Avara | - | - | 20000 | TAB/KG | 50mg 단독 Scale-up 생산 / SAP 코드 동일 | 1210 | V301 | 1310 | V301 |
-| 3 | Semi-FP_Britestock | 4CNR1ZA001ZZ | Cenobamate(US) 25mg_Britestock_30ct | 13333 | - | BTL | Patheon | Avara | 3CNY1Z001ZZZ | US 25mg Tablet | 1/30 | BTL/TAB | Bottle Packaging 전 단계 | 1210 | V401 | 1310 | V401 |
-| 3 | Semi-FP_Britestock | 4CNR2ZA001ZZ | Cenobamate(US) 50mg_Britestock_30ct | 16666 | - | BTL | Patheon | Avara | 3CNY2Z001ZZZ | US 50mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401 |
-| 3 | Semi-FP_Britestock | 4CNR3ZA001ZZ | Cenobamate(US) 100mg_Britestock_30ct | 26666 | - | BTL | Patheon | Avara | 3CNY3Z001ZZZ | US 100mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401 |
-| 3 | Semi-FP_Britestock | 4CNR4ZA001ZZ | Cenobamate(US) 150mg_Britestock_30ct | 17777 | - | BTL | Patheon | Avara | 3CNY4Z001ZZZ | US 150mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401 |
-| 3 | Semi-FP_Britestock | 4CNR5ZA001ZZ | Cenobamate(US) 200mg_Britestock_30ct | 13333 | - | BTL | Patheon | Avara | 3CNY5Z001ZZZ | US 200mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401 |
-| 3 | Semi-FP_Blister Strip | 4CNS0Z2001ZZ | Cenobamate(US) 12.5mg_Blister_Strip A | 14285 | - | BLS | PCI CA | - | 3CNY0Z001ZZZ | US 12.5mg Tablet | 1/14 | BLS/TAB | Blister Card 조립용 | 1220 | V401 | - | - |
-| 3 | Semi-FP_Blister Strip | 4CNS0Z2007ZZ | Cenobamate(CN) 12.5mg_Blister_Strip | 14285 | - | BLS | PCI CA | - | 3CNY0Z007ZZZ | CN 12.5mg Tablet | 1/14 | BLS/TAB | - | 1220 | V401 | - | - |
-| 3 | Semi-FP_Blister Strip | 4CNS1Z2001ZZ | Cenobamate(US) 25mg_Blister_Strip B | 14285 | - | BLS | PCI CA | - | 3CNY1Z001ZZZ | US 25mg Tablet | 1/14 | BLS/TAB | - | 1220 | V401 | - | - |
-| 3 | Semi-FP_Blister Strip | 4CNS2Z1001ZZ | Cenobamate(US) 50mg_Blister_Strip C | 71428 | - | BLS | PCI CA | - | 3CNY2Z001ZZZ | US 50mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | - |
-| 3 | Semi-FP_Blister Strip | 4CNS3Z1001ZZ | Cenobamate(US) 100mg_Blister_Strip D | 114285 | - | BLS | PCI CA | - | 3CNY3Z001ZZZ | US 100mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | - |
-| 3 | Semi-FP_Blister Strip | 4CNS4Z1001ZZ | Cenobamate(US) 150mg_Blister_Strip E | 76190 | - | BLS | PCI CA | - | 3CNY4Z001ZZZ | US 150mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | - |
-| 3 | Semi-FP_Blister Strip | 4CNS5Z1001ZZ | Cenobamate(US) 200mg_Blister_Strip F | 57142 | - | BLS | PCI CA | - | 3CNY5Z001ZZZ | US 200mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | - |
-| 4 | FP_Bottle | 5CNB1ZAA1ZZZ | Cenobamate(US) 25mg_Bottle_30ct | 13333 | - | BTL | Patheon | - | 3CNY1Z001ZZZ / 4CNR1ZA001ZZ | US 25mg Tablet / US 25mg Britestock | 1/30 | BTL/TAB | Patheon만 제조 (PCI US 미제조) | 1210 | V501 | - | - |
-| 4 | FP_Bottle | 5CNB2ZAA1SZZ | Cenobamate(USA) B1 Physician Samples(30) | 16666 | - | BTL | Patheon | - | 3CNY2Z001ZZZ | US 50mg Tablet | 1/30 | BTL/TAB | Physician Sample | 1210 | V501 | - | - |
-| 4 | FP_Bottle | 5CNB2ZAA1ZZZ | Cenobamate(US) B1_50mg_Bottle_30ct | 16666 | - | BTL | Patheon | PCI US | 3CNY2Z001ZZZ / 4CNR2ZA001ZZ | US 50mg Tablet / US 50mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 |
-| 4 | FP_Bottle | 5CNB2ZAA1ZZZ | Cenobamate(US) B1_50mg_Bottle_30ct [Scale-up] | 26666 | - | - | Patheon | - | 3CNY2Z001ZZZ / 4CNR2ZA001ZZ | US 50mg Tablet / US 50mg Britestock | 1/30 | BTL/TAB | Scale-up, SAP 코드 동일 | 1210 | V501 | - | - |
-| 4 | FP_Bottle | 5CNB2ZAE3ZZZ | Cenobamate(CN) 50mg_Bottle_30ct | 16666 | - | BTL | Patheon | - | 3CNY2Z007ZZZ | CN 50mg Tablet | 1/30 | BTL/TAB | - | 1210 | V501 | - | - |
-| 4 | FP_Bottle | 5CNB2ZAE3ZZZ | Cenobamate(CN) 50mg_Bottle_30ct [Scale-up] | 26666 | - | - | Patheon | - | 3CNY2Z007ZZZ | CN 50mg Tablet | 1/30 | BTL/TAB | Scale-up, SAP 코드 동일 | 1210 | V501 | - | - |
-| 4 | FP_Bottle | 5CNB3ZAA1ZZZ | Cenobamate(US) B2_100mg_Bottle_30ct | 26666 | - | BTL | Patheon | PCI US | 3CNY3Z001ZZZ / 4CNR3ZA001ZZ | US 100mg Tablet / US 100mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 |
-| 4 | FP_Bottle | 5CNB4ZAA1ZZZ | Cenobamate(US) B3_150mg_Bottle_30ct | 17777 | - | BTL | Patheon | PCI US | 3CNY4Z001ZZZ / 4CNR4ZA001ZZ | US 150mg Tablet / US 150mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 |
-| 4 | FP_Bottle | 5CNB5ZAA1ZZZ | Cenobamate(US) B4_200mg_Bottle_30ct | 13333 | - | BTL | Patheon | PCI US | 3CNY5Z001ZZZ / 4CNR5ZA001ZZ | US 200mg Tablet / US 200mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 |
-| 4 | FP_Blister Card | 5CNT014A1SZZ | Cenobamate TP1_Physician Sample(12.5X25) | 3000 | - | PAK | PCI CA | - | 4CNS0Z2001ZZ / 4CNS1Z2001ZZ | 12.5mg Strip A / 25mg Strip B | 1+1 | Strip/PAK | Physician Sample | 1220 | V501 | - | - |
-| 4 | FP_Blister Card | 5CNT014A1ZZZ | Cenobamate(US) T1_Pack (12.5mg X 25mg) | 3000 | - | PAK | PCI CA | - | 4CNS0Z2001ZZ / 4CNS1Z2001ZZ | 12.5mg Strip A / 25mg Strip B | 1+1 | Strip/PAK | Titration Pack | 1220 | V501 | - | - |
-| 4 | FP_Blister Card | 5CNT0Z2E3ZZZ | Cenobamate(CN) 12.5mg_Pack | 28571 | - | PAK | PCI CA | - | 4CNS0Z2007ZZ / 4CNS0Z2007ZZ | CN 12.5mg Strip / CN 12.5mg Strip | 1+1 | Strip/PAK | - | 1220 | V501 | - | - |
-| 4 | FP_Blister Card | 5CNT234A1ZZZ | Cenobamate(US) T2_Pack (50mg X 100mg) | 3000 | - | PAK | PCI CA | - | 4CNS2Z1001ZZ / 4CNS3Z1001ZZ | 50mg Strip C / 100mg Strip D | 2+2 | Strip/PAK | Titration Pack | 1220 | V501 | - | - |
-| 4 | FP_Blister Card | 5CNT348A1ZZZ | Cenobamate(USA)2021 MP3_PK 100mg X 150mg | 3000 | - | PAK | PCI CA | - | 4CNS3Z1001ZZ / 4CNS4Z1001ZZ | 100mg Strip D / 150mg Strip E | 4+4 | Strip/PAK | Maintenance Pack | 1220 | V501 | - | - |
-| 4 | FP_Blister Card | 5CNT454A1ZZZ | Cenobamate(US) T3_Pack(150mg X 200mg) | 3000 | - | PAK | PCI CA | - | 4CNS4Z1001ZZ / 4CNS5Z1001ZZ | 150mg Strip E / 200mg Strip F | 2+2 | Strip/PAK | Titration Pack | 1220 | V501 | - | - |
-| 4 | FP_Blister Card | 5CNT458A1ZZZ | Cenobamate(US) MP4_Pack(150mg X 200mg) | 1000 | - | PAK | PCI CA | - | 4CNS4Z1001ZZ / 4CNS5Z1001ZZ | 150mg Strip E / 200mg Strip F | 4+4 | Strip/PAK | Maintenance Pack | 1220 | V501 | - | - |
+> **[Bottle FP 대체경로(route) 안내]** Bottle SKU(`5CNB*`)는 두 가지 제조 경로를 가질 수 있으며, 이는 **AND(둘 다 투입)가 아니라 OR(택1)** 관계입니다.
+> - **ROUTE_DIRECT**: Tablet(DP, `3CNY*`) → Bottle(FP) 직접
+> - **ROUTE_VIA_BRITESTOCK**: Tablet(DP) → Britestock(SP, `4CNR*`) → Bottle(FP)
+>
+> 따라서 Bottle의 input에 Tablet과 Britestock이 함께 매핑된 경우, 두 자재가 동시에 FP에 들어가는 것이 아니라 **둘 중 한 경로로 제조**됩니다. DB의 `input_routes` 컬럼이 각 input의 경로를 구분하며(`코드:ROUTE_DIRECT|코드:ROUTE_VIA_BRITESTOCK`), genealogy 추적 시 실측에 따라 사용된 경로가 확정됩니다.
+
+| Level | Material Type | Material Code | Material Description | Batch Size / (CMO A) | Batch Size / (CMO B) | Unit | CMO A | CMO B | Input Material / Code | Input Material / Description | Conversion / Ratio | Conversion / Unit | Note | SAP Plant (CMO A) | SLoc (CMO A) | SAP Plant (CMO B) | SLoc (CMO B) | Input Routes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---  ---  --- | --- |
+| 0 | Raw Material | 1CNY001ZZZZZ | YKP1941_US | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | US API Input Option A / 3종 RSM 상호 대체 가능 (Interchangeable) | 1100 | 1101 | 1100 | 1102   |  |
+| 0 | Raw Material | 1CNY001NZZZZ | YKP1941_US_New | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | US API Input Option B / 신규 공정 적용 자재 / 3종 RSM 상호 대체 가능 | 1100 | 1101 | 1100 | 1102   |  |
+| 0 | Raw Material | 1CNY002ZZZZZ | YKP1941_EU | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | EU API 전용 Input / US API Input Option C로도 사용 가능 / 3종 RSM 상호 대체 가능 | 1100 | 1101 | 1100 | 1102   |  |
+| 1 | API | 2CNY001ZZZZZ | Cenobamate API_US_Subcontract | 482 | - | KG | SK biotek | - | 1CNY001ZZZZZ / / 1CNY001NZZZZ / / 1CNY002ZZZZZ | YKP1941_US / / YKP1941_US_New / / YKP1941_EU | 0.861 | KG/KG | 실제 합성 공정 / RSM 3종 중 택1 투입 | 1100 | V202 | - | -   |  |
+| 1 | API | 2CNY002ZZZZZ | Cenobamate API_EU_Subcontract | 482 | - | KG | SK biotek | - | 1CNY002ZZZZZ | YKP1941_EU | 0.861 | KG/KG | 실제 합성 공정 / EU RSM만 사용 | 1100 | V202 | - | -   |  |
+| 1 | API | 2CNY004ZZZZZ | Cenobamate API_ROW1_Subcontract | 482 | - | KG | SK biotek | - | 2CNY001ZZZZZ | Cenobamate API_US | 1 | KG/KG | ⚠ 코드 변환만 (물리적 공정 없음) / US API → ROW1 API 코드 변환 | 1100 | V202 | - | -   |  |
+| 1 | API | 2CNY005ZZZZZ | Cenobamate API_CA_Subcontract | 482 | - | KG | SK biotek | - | 2CNY002ZZZZZ | Cenobamate API_EU | 1 | KG/KG | ⚠ 코드 변환만 (물리적 공정 없음) / EU API → CA API 코드 변환 | 1100 | V202 | - | -   |  |
+| 2 | Drug Product | 3CNY0Z001ZZZ | Cenobamate(US) 12.5mg_Tablet | 400000 | 200000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 80000 | TAB/KG | Common Blend: API 40kg 중 5kg 분량 → 1배치 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY1Z001ZZZ | Cenobamate(US) 25mg_Tablet | 400000 | 200000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 40000 | TAB/KG | Common Blend: API 40kg 중 10kg 분량 → 1배치 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY2Z001ZZZ | Cenobamate(US) 50mg_Tablet | 500000 | 800000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 20000 | TAB/KG | Common Blend: API 40kg 중 25kg 분량 → 1배치 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY2Z001ZZZ | Cenobamate(US) 50mg_Tablet [Scale-up] | 800000 | - | - | Patheon | Avara | - | - | 20000 | TAB/KG | 50mg 단독 Scale-up 생산 / SAP 코드 동일, Desc.으로 구분 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY3Z001ZZZ | Cenobamate(US) 100mg_Tablet | 800000 | 800000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 10000 | TAB/KG | 단독 제조 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY4Z001ZZZ | Cenobamate(US) 150mg_Tablet | 533333 | 533333 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 6666.66 | TAB/KG | 단독 제조 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY5Z001ZZZ | Cenobamate(US) 200mg_Tablet | 400000 | 1200000 | TAB | Patheon | Avara | 2CNY001ZZZZZ | API_US | 5000 | TAB/KG | 단독 제조 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY0Z004ZZZ | Cenobamate(CA) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 80000 | TAB/KG | Avara: US 전용 (CA 미승인) | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY1Z004ZZZ | Cenobamate(CA) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 40000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY2Z004ZZZ | Cenobamate(CA) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 20000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY3Z004ZZZ | Cenobamate(CA) 100mg_Tablet | 800000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 10000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY4Z004ZZZ | Cenobamate(CA) 150mg_Tablet | 533333 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 6666.66 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY5Z004ZZZ | Cenobamate(CA) 200mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_CA | 5000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY0Z005ZZZ | Cenobamate(IL) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 80000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY1Z005ZZZ | Cenobamate(IL) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY005ZZZZZ | API_ROW1 | 40000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY2Z005ZZZ | Cenobamate(IL) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 20000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY3Z005ZZZ | Cenobamate(IL) 100mg_Tablet | 800000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 10000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY4Z005ZZZ | Cenobamate(IL) 150mg_Tablet | 533333 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 6666.66 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY5Z005ZZZ | Cenobamate(IL) 200mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 5000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY0Z006ZZZ | Cenobamate(HK) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 80000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY1Z006ZZZ | Cenobamate(HK) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 40000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY2Z006ZZZ | Cenobamate(HK) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 20000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY3Z006ZZZ | Cenobamate(HK) 100mg_Tablet | 800000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 10000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY4Z006ZZZ | Cenobamate(HK) 150mg_Tablet | 533333 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 6666.66 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY5Z006ZZZ | Cenobamate(HK) 200mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 5000 | TAB/KG | - | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY0Z007ZZZ | Cenobamate(CN) 12.5mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 80000 | TAB/KG | CN Common Blend: API 40kg 중 5kg×3배치=15kg | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY1Z007ZZZ | Cenobamate(CN) 25mg_Tablet | 400000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 40000 | TAB/KG | CN Common Blend에 미포함 / 별도 단독 생산 시 해당 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY2Z007ZZZ | Cenobamate(CN) 50mg_Tablet | 500000 | - | TAB | Patheon | Avara | 2CNY004ZZZZZ | API_ROW1 | 20000 | TAB/KG | CN Common Blend: API 40kg 중 25kg → 1배치 | 1210 | V301 | 1310 | V301   |  |
+| 2 | Drug Product | 3CNY2Z007ZZZ | Cenobamate(CN) 50mg_Tablet [Scale-up] | 800000 | - | - | Patheon | Avara | - | - | 20000 | TAB/KG | 50mg 단독 Scale-up 생산 / SAP 코드 동일 | 1210 | V301 | 1310 | V301   |  |
+| 3 | Semi-FP_Britestock | 4CNR1ZA001ZZ | Cenobamate(US) 25mg_Britestock_30ct | 13333 | - | BTL | Patheon | Avara | 3CNY1Z001ZZZ | US 25mg Tablet | 1/30 | BTL/TAB | Bottle Packaging 전 단계 | 1210 | V401 | 1310 | V401   |  |
+| 3 | Semi-FP_Britestock | 4CNR2ZA001ZZ | Cenobamate(US) 50mg_Britestock_30ct | 16666 | - | BTL | Patheon | Avara | 3CNY2Z001ZZZ | US 50mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401   |  |
+| 3 | Semi-FP_Britestock | 4CNR3ZA001ZZ | Cenobamate(US) 100mg_Britestock_30ct | 26666 | - | BTL | Patheon | Avara | 3CNY3Z001ZZZ | US 100mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401   |  |
+| 3 | Semi-FP_Britestock | 4CNR4ZA001ZZ | Cenobamate(US) 150mg_Britestock_30ct | 17777 | - | BTL | Patheon | Avara | 3CNY4Z001ZZZ | US 150mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401   |  |
+| 3 | Semi-FP_Britestock | 4CNR5ZA001ZZ | Cenobamate(US) 200mg_Britestock_30ct | 13333 | - | BTL | Patheon | Avara | 3CNY5Z001ZZZ | US 200mg Tablet | 1/30 | BTL/TAB | - | 1210 | V401 | 1310 | V401   |  |
+| 3 | Semi-FP_Blister Strip | 4CNS0Z2001ZZ | Cenobamate(US) 12.5mg_Blister_Strip A | 14285 | - | BLS | PCI CA | - | 3CNY0Z001ZZZ | US 12.5mg Tablet | 1/14 | BLS/TAB | Blister Card 조립용 | 1220 | V401 | - | -   |  |
+| 3 | Semi-FP_Blister Strip | 4CNS0Z2007ZZ | Cenobamate(CN) 12.5mg_Blister_Strip | 14285 | - | BLS | PCI CA | - | 3CNY0Z007ZZZ | CN 12.5mg Tablet | 1/14 | BLS/TAB | - | 1220 | V401 | - | -   |  |
+| 3 | Semi-FP_Blister Strip | 4CNS1Z2001ZZ | Cenobamate(US) 25mg_Blister_Strip B | 14285 | - | BLS | PCI CA | - | 3CNY1Z001ZZZ | US 25mg Tablet | 1/14 | BLS/TAB | - | 1220 | V401 | - | -   |  |
+| 3 | Semi-FP_Blister Strip | 4CNS2Z1001ZZ | Cenobamate(US) 50mg_Blister_Strip C | 71428 | - | BLS | PCI CA | - | 3CNY2Z001ZZZ | US 50mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | -   |  |
+| 3 | Semi-FP_Blister Strip | 4CNS3Z1001ZZ | Cenobamate(US) 100mg_Blister_Strip D | 114285 | - | BLS | PCI CA | - | 3CNY3Z001ZZZ | US 100mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | -   |  |
+| 3 | Semi-FP_Blister Strip | 4CNS4Z1001ZZ | Cenobamate(US) 150mg_Blister_Strip E | 76190 | - | BLS | PCI CA | - | 3CNY4Z001ZZZ | US 150mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | -   |  |
+| 3 | Semi-FP_Blister Strip | 4CNS5Z1001ZZ | Cenobamate(US) 200mg_Blister_Strip F | 57142 | - | BLS | PCI CA | - | 3CNY5Z001ZZZ | US 200mg Tablet | 1/7 | BLS/TAB | - | 1220 | V401 | - | -   |  |
+| 4 | FP_Bottle | 5CNB1ZAA1ZZZ | Cenobamate(US) 25mg_Bottle_30ct | 13333 | - | BTL | Patheon | - | 3CNY1Z001ZZZ / 4CNR1ZA001ZZ | US 25mg Tablet / US 25mg Britestock | 1/30 | BTL/TAB | Patheon만 제조 (PCI US 미제조) | 1210 | V501 | - | - | 직접=3CNY1Z001ZZZ 또는 Britestock경유=4CNR1ZA001ZZ |
+| 4 | FP_Bottle | 5CNB2ZAA1SZZ | Cenobamate(USA) B1 Physician Samples(30) | 16666 | - | BTL | Patheon | - | 3CNY2Z001ZZZ | US 50mg Tablet | 1/30 | BTL/TAB | Physician Sample | 1210 | V501 | - | - | 직접=3CNY2Z001ZZZ |
+| 4 | FP_Bottle | 5CNB2ZAA1ZZZ | Cenobamate(US) B1_50mg_Bottle_30ct | 16666 | - | BTL | Patheon | PCI US | 3CNY2Z001ZZZ / 4CNR2ZA001ZZ | US 50mg Tablet / US 50mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 | 직접=3CNY2Z001ZZZ 또는 Britestock경유=4CNR2ZA001ZZ |
+| 4 | FP_Bottle | 5CNB2ZAA1ZZZ | Cenobamate(US) B1_50mg_Bottle_30ct [Scale-up] | 26666 | - | - | Patheon | - | 3CNY2Z001ZZZ / 4CNR2ZA001ZZ | US 50mg Tablet / US 50mg Britestock | 1/30 | BTL/TAB | Scale-up, SAP 코드 동일 | 1210 | V501 | - | - | 직접=3CNY2Z001ZZZ 또는 Britestock경유=4CNR2ZA001ZZ |
+| 4 | FP_Bottle | 5CNB2ZAE3ZZZ | Cenobamate(CN) 50mg_Bottle_30ct | 16666 | - | BTL | Patheon | - | 3CNY2Z007ZZZ | CN 50mg Tablet | 1/30 | BTL/TAB | - | 1210 | V501 | - | - | 직접=3CNY2Z007ZZZ |
+| 4 | FP_Bottle | 5CNB2ZAE3ZZZ | Cenobamate(CN) 50mg_Bottle_30ct [Scale-up] | 26666 | - | - | Patheon | - | 3CNY2Z007ZZZ | CN 50mg Tablet | 1/30 | BTL/TAB | Scale-up, SAP 코드 동일 | 1210 | V501 | - | - | 직접=3CNY2Z007ZZZ |
+| 4 | FP_Bottle | 5CNB3ZAA1ZZZ | Cenobamate(US) B2_100mg_Bottle_30ct | 26666 | - | BTL | Patheon | PCI US | 3CNY3Z001ZZZ / 4CNR3ZA001ZZ | US 100mg Tablet / US 100mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 | 직접=3CNY3Z001ZZZ 또는 Britestock경유=4CNR3ZA001ZZ |
+| 4 | FP_Bottle | 5CNB4ZAA1ZZZ | Cenobamate(US) B3_150mg_Bottle_30ct | 17777 | - | BTL | Patheon | PCI US | 3CNY4Z001ZZZ / 4CNR4ZA001ZZ | US 150mg Tablet / US 150mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 | 직접=3CNY4Z001ZZZ 또는 Britestock경유=4CNR4ZA001ZZ |
+| 4 | FP_Bottle | 5CNB5ZAA1ZZZ | Cenobamate(US) B4_200mg_Bottle_30ct | 13333 | - | BTL | Patheon | PCI US | 3CNY5Z001ZZZ / 4CNR5ZA001ZZ | US 200mg Tablet / US 200mg Britestock | 1/30 | BTL/TAB | PCI US: Avara 제조 Tablet만 포장 | 1210 | V501 | 1230 | V501 | 직접=3CNY5Z001ZZZ 또는 Britestock경유=4CNR5ZA001ZZ |
+| 4 | FP_Blister Card | 5CNT014A1SZZ | Cenobamate TP1_Physician Sample(12.5X25) | 3000 | - | PAK | PCI CA | - | 4CNS0Z2001ZZ / 4CNS1Z2001ZZ | 12.5mg Strip A / 25mg Strip B | 1+1 | Strip/PAK | Physician Sample | 1220 | V501 | - | -   |  |
+| 4 | FP_Blister Card | 5CNT014A1ZZZ | Cenobamate(US) T1_Pack (12.5mg X 25mg) | 3000 | - | PAK | PCI CA | - | 4CNS0Z2001ZZ / 4CNS1Z2001ZZ | 12.5mg Strip A / 25mg Strip B | 1+1 | Strip/PAK | Titration Pack | 1220 | V501 | - | -   |  |
+| 4 | FP_Blister Card | 5CNT0Z2E3ZZZ | Cenobamate(CN) 12.5mg_Pack | 28571 | - | PAK | PCI CA | - | 4CNS0Z2007ZZ / 4CNS0Z2007ZZ | CN 12.5mg Strip / CN 12.5mg Strip | 1+1 | Strip/PAK | - | 1220 | V501 | - | -   |  |
+| 4 | FP_Blister Card | 5CNT234A1ZZZ | Cenobamate(US) T2_Pack (50mg X 100mg) | 3000 | - | PAK | PCI CA | - | 4CNS2Z1001ZZ / 4CNS3Z1001ZZ | 50mg Strip C / 100mg Strip D | 2+2 | Strip/PAK | Titration Pack | 1220 | V501 | - | -   |  |
+| 4 | FP_Blister Card | 5CNT348A1ZZZ | Cenobamate(USA)2021 MP3_PK 100mg X 150mg | 3000 | - | PAK | PCI CA | - | 4CNS3Z1001ZZ / 4CNS4Z1001ZZ | 100mg Strip D / 150mg Strip E | 4+4 | Strip/PAK | Maintenance Pack | 1220 | V501 | - | -   |  |
+| 4 | FP_Blister Card | 5CNT454A1ZZZ | Cenobamate(US) T3_Pack(150mg X 200mg) | 3000 | - | PAK | PCI CA | - | 4CNS4Z1001ZZ / 4CNS5Z1001ZZ | 150mg Strip E / 200mg Strip F | 2+2 | Strip/PAK | Titration Pack | 1220 | V501 | - | -   |  |
+| 4 | FP_Blister Card | 5CNT458A1ZZZ | Cenobamate(US) MP4_Pack(150mg X 200mg) | 1000 | - | PAK | PCI CA | - | 4CNS4Z1001ZZ / 4CNS5Z1001ZZ | 150mg Strip E / 200mg Strip F | 4+4 | Strip/PAK | Maintenance Pack | 1220 | V501 | - | -   |  |
 
 ---
 
