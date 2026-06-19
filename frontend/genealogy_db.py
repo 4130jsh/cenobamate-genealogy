@@ -18,6 +18,7 @@ TIER_COLOR = {
 }
 EDGE_COLOR = {"PROD": "#333333", "REF_PO_ITEM": "#1f77b4", "DOC_TRANSFER": "#2ca02c"}
 EXPECTED_COLOR = "#c9b8d8"  # BOM 기대(실측 없음) 점선 노드
+TRANSFER_COLOR = "#888888"  # 공장이전/재배치(같은 자재 다른 배치) 링크
 
 
 def tier_from_code(material: str) -> str:
@@ -337,9 +338,16 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
         a, b = nid.get(r["from_node"]), nid.get(r["to_node"])
         if not a or not b:
             continue
-        color = EDGE_COLOR.get(r.get("edge_kind", ""), "#666666")
-        style = "dashed" if r.get("date_violation") in (1, True, "1", "True") else "solid"
-        lines.append(f'  {a} -> {b} [color="{color}", style={style}];')
+        fm = str(r.get("from_material", "")).strip()
+        tm = str(r.get("to_material", "")).strip()
+        if fm and fm == tm:
+            # 같은 자재 다른 배치 = 공장이전/재배치(CMO 핸드오프) — 제조 전환과 구분
+            lines.append(f'  {a} -> {b} [color="{TRANSFER_COLOR}", style=dashed, '
+                         f'label="이전", fontcolor="{TRANSFER_COLOR}", fontsize=8];')
+        else:
+            color = EDGE_COLOR.get(r.get("edge_kind", ""), "#666666")
+            style = "dashed" if r.get("date_violation") in (1, True, "1", "True") else "solid"
+            lines.append(f'  {a} -> {b} [color="{color}", style={style}];')
     lines.append("}")
     return "\n".join(lines)
 

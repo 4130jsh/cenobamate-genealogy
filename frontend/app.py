@@ -108,7 +108,7 @@ def main() -> None:
                 cap = f"상류 노드 {len(visited)}개 · 실측 엣지 {len(sub)}개"
                 if exp:
                     cap += f" · BOM 기대(끊김) {len(exp)}개"
-                st.caption(cap + "  (실선=실측, 점선보라=BOM 기대 상류, 점선=날짜 역전)")
+                st.caption(cap + "  (실선=실측 제조, 회색점선'이전'=공장이전/재배치, 점선보라=BOM 기대 상류)")
                 if exp:
                     with st.expander(f"끊긴 상류(BOM_EXPECTED) {len(exp)}개"):
                         st.dataframe(exp, use_container_width=True, hide_index=True)
@@ -130,7 +130,8 @@ def main() -> None:
             else:
                 dot = gdb.build_dot(sub, nodes, sel, "downstream")
                 _graph_with_downloads(dot, f"하류 {sel}", f"down_{sel}")
-                st.caption(f"하류 노드 {len(visited)}개 · 실측 엣지 {len(sub)}개")
+                st.caption(f"하류 노드 {len(visited)}개 · 실측 엣지 {len(sub)}개"
+                           "  (실선=실측 제조, 회색점선'이전'=공장이전/재배치)")
                 with st.expander("이 경로의 실측 엣지 테이블"):
                     _edge_table(sub)
 

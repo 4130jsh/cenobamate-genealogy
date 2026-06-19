@@ -165,6 +165,23 @@ def test_node_label_has_description():
     assert "[API-B1]" in dot, "배치는 [..] 형태로 라벨에 있어야 함"
 
 
+def test_transfer_link_styled():
+    import pandas as pd
+    # 같은 자재 다른 배치(공장이전/재배치)는 회색점선+'이전' 라벨, 제조 전환은 일반 색
+    sub = pd.DataFrame([
+        {"from_node": "2CNY001ZZZZZ||APIH", "to_node": "2CNY001ZZZZZ||APIP",
+         "from_material": "2CNY001ZZZZZ", "to_material": "2CNY001ZZZZZ",
+         "from_tier": "API", "to_tier": "API", "edge_kind": "REF_PO_ITEM"},
+        {"from_node": "1CNY001ZZZZZ||R1", "to_node": "2CNY001ZZZZZ||APIH",
+         "from_material": "1CNY001ZZZZZ", "to_material": "2CNY001ZZZZZ",
+         "from_tier": "RSM", "to_tier": "API", "edge_kind": "PROD"},
+    ])
+    dot = gdb.build_dot(sub, pd.DataFrame(), "2CNY001ZZZZZ||APIP", "upstream")
+    assert 'label="이전"' in dot and gdb.TRANSFER_COLOR in dot, "공장이전 링크 스타일 누락"
+    # 제조 전환(RSM→API)은 '이전' 라벨이 붙으면 안 됨 → 라벨 개수 1개
+    assert dot.count('label="이전"') == 1, "제조 전환에 잘못 '이전' 라벨이 붙음"
+
+
 def test_dot_to_html_full_graph():
     dot = "digraph { a -> b; }"
     html = gdb.dot_to_html(dot, "테스트")
