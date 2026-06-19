@@ -165,6 +165,18 @@ def test_node_label_has_description():
     assert "[API-B1]" in dot, "배치는 [..] 형태로 라벨에 있어야 함"
 
 
+def test_legacy_api_no_bom_expected():
+    # legacy API 코드(1CNZ*) 노드는 RSM 미관리 → BOM 기대(점선 RSM) 표시 안 함
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    bexp = gdb.load_bom_expected(db); legacy = gdb.load_legacy_map(db)
+    start = "1CNZ001ZZZZZ||LAPI-B1"
+    sub, vis, _ = gdb.trace_subgraph(edges, start, "upstream")
+    miss = gdb.expected_missing(vis, edges, bexp, nodes, legacy)
+    lapi_miss = [m for m in miss if m["to_node"] == start]
+    assert not lapi_miss, f"legacy API 노드에 BOM 기대가 표시됨: {lapi_miss}"
+
+
 def test_transfer_link_styled():
     import pandas as pd
     # 같은 자재 다른 배치(공장이전/재배치)는 회색점선+'이전' 라벨, 제조 전환은 일반 색

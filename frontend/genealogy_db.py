@@ -186,7 +186,11 @@ def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_ex
                         "to_node": n, "to_material": node_mat.get(n, "")})
 
     for n in visited_nodes:
-        M = _norm(node_mat.get(n, ""), legacy_map)
+        raw_mat = node_mat.get(n, "")
+        # legacy API 코드(1CNZ*)는 RSM 미관리 시기 코드 → 투입 RSM 없음. BOM 기대 표시 안 함.
+        if raw_mat in legacy_map:
+            continue
+        M = _norm(raw_mat, legacy_map)
         have = incoming.get(n, set())
         for F in sorted(exp_unrouted.get(M, set())):
             emit(F, n)
