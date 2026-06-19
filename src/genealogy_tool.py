@@ -1273,6 +1273,12 @@ class GenealogyTool:
             _stamp(self.nodes).to_sql("gen_nodes", con, if_exists=mode, index=False)
             _stamp(self.edges).to_sql("gen_edges", con, if_exists=mode, index=False)
             _stamp(self.bom.bom_edges).to_sql("gen_bom_expected", con, if_exists=mode, index=False)
+            # legacy(1CNZ*)→현행(2CNY*) 매핑 (frontend BOM_EXPECTED 정규화용)
+            legacy_df = pd.DataFrame(
+                [{"run_id": run_id, "legacy_code": k, "current_code": v}
+                 for k, v in self.bom.legacy_to_current.items()],
+                columns=["run_id", "legacy_code", "current_code"])
+            legacy_df.to_sql("gen_legacy_map", con, if_exists=mode, index=False)
             cur.execute("INSERT OR REPLACE INTO build_runs VALUES (?,?,?,?,?,?,?,?,?,?)", (
                 run_id, built_at, json.dumps(self.sap_files, ensure_ascii=False), self.bom_db,
                 self.pairing_mode, len(self.rows), len(self.edges), len(self.nodes),
@@ -1291,6 +1297,9 @@ class GenealogyTool:
                 DROP VIEW IF EXISTS v_latest_bom_expected;
                 CREATE VIEW v_latest_bom_expected AS
                     SELECT b.* FROM gen_bom_expected b WHERE b.run_id IN (SELECT run_id FROM v_latest_run);
+                DROP VIEW IF EXISTS v_latest_legacy_map;
+                CREATE VIEW v_latest_legacy_map AS
+                    SELECT m.* FROM gen_legacy_map m WHERE m.run_id IN (SELECT run_id FROM v_latest_run);
             """)
             con.commit()
         finally:

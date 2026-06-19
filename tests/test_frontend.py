@@ -80,6 +80,55 @@ def test_build_dot_valid():
         assert stray not in dot, f"무관 노드 {stray} 가 그래프에 새어듦"
 
 
+def test_downstream_rsm_reaches_fp():
+    db = _warehouse()
+    edges = gdb.load_edges(db)
+    # RSM-B1 에서 하류로 FP-B1 까지 도달해야 함
+    sub, visited, _ = gdb.trace_subgraph(edges, "1CNY001ZZZZZ||RSM-B1", "downstream")
+    batches = {n.split("||")[1] for n in visited if "||" in n}
+    for b in ("RSM-B1", "API-B1", "DP-B1", "SP-B1", "FP-B1"):
+        assert b in batches, f"하류 서브그래프에 {b} 누락 (도달={batches})"
+
+
+def test_search_nodes_filter():
+    db = _warehouse()
+    nodes = gdb.load_nodes(db)
+    # batch 부분일치
+    hit = gdb.search_nodes(nodes, "FP-B1")
+    assert "5CNT014A1ZZZ||FP-B1" in set(hit["node"])
+    # tier 필터
+    only_fp = gdb.search_nodes(nodes, "", ["FP"])
+    assert not only_fp.empty and set(only_fp["tier"]) == {"FP"}
+
+
+def test_expected_missing_and_dot():
+    db = _warehouse()
+    edges = gdb.load_edges(db)
+    nodes = gdb.load_nodes(db)
+    bexp = gdb.load_bom_expected(db)
+    legacy = gdb.load_legacy_map(db)
+    start = "5CNT014A1ZZZ||FP-B1"
+    sub, visited, _ = gdb.trace_subgraph(edges, start, "upstream")
+    miss = gdb.expected_missing(visited, edges, bexp, nodes, legacy)
+    # API-B1 의 BOM 입력 중 실측 없는 RSM(1CNY001N/1CNY002)이 끊긴 상류로 떠야 함
+    expmats = {m["from_material"] for m in miss}
+    assert any(x in expmats for x in ("1CNY001NZZZZ", "1CNY002ZZZZZ")), f"BOM 기대 누락 미검출: {expmats}"
+    # 실측이 있는 1CNY001ZZZZZ 는 끊긴 상류로 뜨면 안 됨
+    api_node = "2CNY001ZZZZZ||API-B1"
+    api_miss = {m["from_material"] for m in miss if m["to_node"] == api_node}
+    assert "1CNY001ZZZZZ" not in api_miss, "실측 있는 상류가 BOM 기대로 잘못 분류됨"
+    # DOT 에 점선 기대 노드가 들어가야 함
+    dot = gdb.build_dot(sub, nodes, start, "upstream", expected=miss)
+    assert "BOM 기대" in dot and "dashed" in dot
+
+
+def test_legacy_map_loaded():
+    db = _warehouse()
+    lm = gdb.load_legacy_map(db)
+    # legacy_api_codes 가 DB에 있으므로 매핑이 비어있지 않아야 함
+    assert lm.get("1CNZ001ZZZZZ") == "2CNY001ZZZZZ", f"legacy 매핑 누락: {lm}"
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

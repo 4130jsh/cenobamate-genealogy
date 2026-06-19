@@ -23,8 +23,8 @@ SAP MB51 자재이동 export와 BOM 데이터베이스를 결합해 배치 단�
 ├── src/
 │   └── genealogy_tool.py      # 메인 추적 도구 (구 v4, 단일 파일)
 ├── frontend/                  # [Phase 3] Streamlit 조회 앱 (warehouse 읽기 전용)
-│   ├── app.py                 #   UI (FP→RSM 상류 그래프 등)
-│   └── genealogy_db.py        #   DB 로딩·서브그래프·Graphviz DOT (순수 함수, 테스트됨)
+│   ├── app.py                 #   UI (상류 FP→RSM·BOM_EXPECTED 점선, 하류 RSM→FP, 검색/필터)
+│   └── genealogy_db.py        #   DB 로딩·서브그래프·끊긴상류·Graphviz DOT (순수 함수, 테스트됨)
 ├── data/
 │   ├── Cenobamate_BOM_DB_v1.sqlite   # BOM/단가/관세 DB (단일 출처)
 │   ├── Cenobamate_BOM_DB_v1.xlsx     # 동일 내용 Excel (사람 편집용)
