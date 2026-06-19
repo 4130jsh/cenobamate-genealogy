@@ -628,9 +628,18 @@ class GenealogyTool:
 
         matched: Set[int] = set()
         doc_match_count: Dict[str, int] = defaultdict(int)
+
+        def posted_before(o, rev) -> bool:
+            # reversal 은 자기보다 먼저 전기된 원본만 취소 가능(미래 문서 취소 불가)
+            od, rd = clean_str(o["posting_date"]), clean_str(rev["posting_date"])
+            if od != rd:
+                return od < rd
+            return clean_str(o["material_doc"]) < clean_str(rev["material_doc"])
+
         for _, r in rev_rows:
             orig_mvt = REVERSAL_TO_ORIGINAL[r["movement_type"]]
-            cands = [j for j in orig_index.get(key(orig_mvt, r), []) if j not in matched]
+            cands = [j for j in orig_index.get(key(orig_mvt, r), [])
+                     if j not in matched and posted_before(recs[j], r)]
             if not cands:
                 continue
             # 연대순 매칭: 이미 매칭 시작된 문서 우선 → 가장 이른 원본부터 취소(마지막 기록이 살아남음)

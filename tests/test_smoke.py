@@ -194,6 +194,13 @@ def test_cancelled_batch_excluded_from_nodes():
     assert "3CNY0Z001ZZZ||DPR" not in tool.cancelled_nodes, "재생산으로 살아있는 배치가 잘못 취소됨"
 
 
+def test_reversal_does_not_void_later_production():
+    # 취소(102)는 자기보다 먼저 전기된 빈 GR 을 무효화해야 하고, 나중에 전기된 진짜 생산문서
+    # (101+543)는 보존되어 API 투입 엣지가 살아있어야 함 (CXHKN 회귀)
+    tool, _ = _build()
+    assert _has_edge(tool, "PROD", "APIZ", "TBN"), "재생산문서의 API→Tablet 엣지가 사라짐(취소가 나중 문서를 무효화)"
+
+
 def test_no_self_loop_edges():
     # 같은 (material,batch) 위치 이동은 자기-루프 엣지를 만들면 안 됨(계보 노이즈)
     tool, _ = _build()
