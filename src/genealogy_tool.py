@@ -236,6 +236,7 @@ class GenealogyTool:
 
         self.build_warnings: List[str] = []
         self.unmatched_rows: List[dict] = []   # C-4
+        self.cancelled_nodes: Set[str] = set()  # 완전 취소(reversal)된 생산 배치 노드
 
         self.bom = self.load_bom_master(bom_db)
         self.rows = self.load_rows_from_store(from_store) if from_store else self.load_sap_files(self.sap_files)
@@ -651,7 +652,17 @@ class GenealogyTool:
 
         if not void_docs:
             return rows
-        self.build_warnings.append(f"reversal-net: voided {len(void_docs)} fully-reversed document(s)")
+        # 무효화된 문서에서만 생산(101 등)된 배치 = 완전 취소된 유령 배치 → 노드에서 제외
+        prod_out = set(MOVEMENT_CLASS["production_out"])
+        produced_void: Set[str] = set()
+        produced_alive: Set[str] = set()
+        for r in recs:
+            if r["movement_type"] in prod_out and float(r["qty"]) > 0 and r["node"]:
+                (produced_void if clean_str(r["material_doc"]) in void_docs else produced_alive).add(r["node"])
+        self.cancelled_nodes = produced_void - produced_alive
+        self.build_warnings.append(
+            f"reversal-net: voided {len(void_docs)} fully-reversed document(s)"
+            + (f", {len(self.cancelled_nodes)} cancelled batch node(s)" if self.cancelled_nodes else ""))
         return rows[~rows["material_doc"].isin(void_docs)].copy()
 
     # ----------------------------------------------------------
@@ -965,6 +976,8 @@ class GenealogyTool:
 
     def build_nodes(self, rows, edges) -> pd.DataFrame:
         base = rows[rows["node"] != ""].copy()
+        if self.cancelled_nodes:   # 완전 취소(reversal)된 유령 생산 배치 제외
+            base = base[~base["node"].isin(self.cancelled_nodes)]
         if base.empty:
             return pd.DataFrame(columns=["node", "material", "batch", "tier", "description", "cmo", "plant", "sloc"])
         agg = (base.groupby(["node", "material", "batch", "tier"], dropna=False)

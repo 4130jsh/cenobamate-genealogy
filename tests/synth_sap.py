@@ -199,6 +199,15 @@ def build_rows() -> list[dict]:
         _row("DOC_STO_I", 1, "2CNY001ZZZZZ", "APIP", "V101", 901, +50.0, "2026-12-23",
              po="STOPO", po_item="1", ref="STO", plant="1210"),
     ]
+
+    # --- 케이스 18: 완전 취소된 생산 배치 — 유령 노드 제외 ---
+    # Bottle CXLBOT 를 생산(101)했다 전량 취소(102/544). 재생산 없음 → 노드에서 제외해야 함.
+    r += [
+        _row("DOC_CXL", 1, "4CNR2ZA001ZZ", "BRX", "4100", 543, -50.0, "2026-12-25", plant="1210"),
+        _row("DOC_CXL", 2, "5CNB2ZAA1ZZZ", "CXLBOT", "V501", 101, +50.0, "2026-12-25", plant="1210"),
+        _row("DOC_CXLR", 1, "4CNR2ZA001ZZ", "BRX", "4100", 544, +50.0, "2026-12-26", plant="1210"),
+        _row("DOC_CXLR", 2, "5CNB2ZAA1ZZZ", "CXLBOT", "V501", 102, -50.0, "2026-12-26", plant="1210"),
+    ]
     return r
 
 

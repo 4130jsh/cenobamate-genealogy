@@ -185,6 +185,15 @@ def test_cross_plant_transfer_kept():
     assert _has_edge(tool, "REF_PO_ITEM", "APIH", "APIP"), "공장 간 이전(APIH→APIP) 엣지가 사라짐"
 
 
+def test_cancelled_batch_excluded_from_nodes():
+    # 완전 취소(reversal)된 생산 배치는 유령 노드이므로 노드 집합에서 제외
+    tool, _ = _build()
+    assert "5CNB2ZAA1ZZZ||CXLBOT" not in set(tool.nodes["node"]), "완전 취소된 생산 배치가 노드에 남음"
+    assert "5CNB2ZAA1ZZZ||CXLBOT" in tool.cancelled_nodes, "취소 배치가 cancelled_nodes 에 기록 안 됨"
+    # 정상 재생산 케이스(DPR)는 취소되면 안 됨(다른 문서에서 살아있음)
+    assert "3CNY0Z001ZZZ||DPR" not in tool.cancelled_nodes, "재생산으로 살아있는 배치가 잘못 취소됨"
+
+
 def test_no_self_loop_edges():
     # 같은 (material,batch) 위치 이동은 자기-루프 엣지를 만들면 안 됨(계보 노이즈)
     tool, _ = _build()
