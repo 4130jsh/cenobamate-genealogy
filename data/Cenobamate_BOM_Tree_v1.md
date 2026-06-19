@@ -12,12 +12,14 @@
 >
 > 따라서 Bottle의 input에 Tablet과 Britestock이 함께 매핑된 경우, 두 자재가 동시에 FP에 들어가는 것이 아니라 **둘 중 한 경로로 제조**됩니다. DB의 `input_routes` 컬럼이 각 input의 경로를 구분하며(`코드:ROUTE_DIRECT|코드:ROUTE_VIA_BRITESTOCK`), genealogy 추적 시 실측에 따라 사용된 경로가 확정됩니다.
 
+> **[API RSM 호환그룹(interchangeable) 안내]** API `2CNY001ZZZZZ`(US)의 RSM input 3종(`1CNY001ZZZZZ` US / `1CNY001NZZZZ` US_New / `1CNY002ZZZZZ` EU)은 **상호 대체 가능한 동일 등급**입니다. **택1 또는 복수 조합**으로 투입되며(예: US만, 또는 US+EU, 또는 3종 모두), 어느 조합이 와도 정상입니다. DB의 `input_group`/`input_group_mode`(ANY_OR_COMBO) 컬럼이 이를 정의하며, genealogy 추적 시 그룹 중 하나라도 실측되면 충족으로 처리하고 미사용 RSM을 누락으로 표시하지 않습니다. (route와 달리, 거치는 공정 경로가 다른 것이 아니라 같은 역할의 호환 원료입니다.)
+
 | Level | Material Type | Material Code | Material Description | Batch Size / (CMO A) | Batch Size / (CMO B) | Unit | CMO A | CMO B | Input Material / Code | Input Material / Description | Conversion / Ratio | Conversion / Unit | Note | SAP Plant (CMO A) | SLoc (CMO A) | SAP Plant (CMO B) | SLoc (CMO B) | Input Routes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---  ---  --- | --- |
 | 0 | Raw Material | 1CNY001ZZZZZ | YKP1941_US | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | US API Input Option A / 3종 RSM 상호 대체 가능 (Interchangeable) | 1100 | 1101 | 1100 | 1102   |  |
 | 0 | Raw Material | 1CNY001NZZZZ | YKP1941_US_New | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | US API Input Option B / 신규 공정 적용 자재 / 3종 RSM 상호 대체 가능 | 1100 | 1101 | 1100 | 1102   |  |
 | 0 | Raw Material | 1CNY002ZZZZZ | YKP1941_EU | 200 | 180 | KG | Lianhe | Wisdom | - | - | - | - | EU API 전용 Input / US API Input Option C로도 사용 가능 / 3종 RSM 상호 대체 가능 | 1100 | 1101 | 1100 | 1102   |  |
-| 1 | API | 2CNY001ZZZZZ | Cenobamate API_US_Subcontract | 482 | - | KG | SK biotek | - | 1CNY001ZZZZZ / / 1CNY001NZZZZ / / 1CNY002ZZZZZ | YKP1941_US / / YKP1941_US_New / / YKP1941_EU | 0.861 | KG/KG | 실제 합성 공정 / RSM 3종 중 택1 투입 | 1100 | V202 | - | -   |  |
+| 1 | API | 2CNY001ZZZZZ | Cenobamate API_US_Subcontract | 482 | - | KG | SK biotek | - | 1CNY001ZZZZZ / / 1CNY001NZZZZ / / 1CNY002ZZZZZ | YKP1941_US / / YKP1941_US_New / / YKP1941_EU | 0.861 | KG/KG | 실제 합성 공정 / RSM 3종(US·US_New·EU) 상호 대체 가능(interchangeable) / 택1 또는 복수 조합 투입 | 1100 | V202 | - | -   |  |
 | 1 | API | 2CNY002ZZZZZ | Cenobamate API_EU_Subcontract | 482 | - | KG | SK biotek | - | 1CNY002ZZZZZ | YKP1941_EU | 0.861 | KG/KG | 실제 합성 공정 / EU RSM만 사용 | 1100 | V202 | - | -   |  |
 | 1 | API | 2CNY004ZZZZZ | Cenobamate API_ROW1_Subcontract | 482 | - | KG | SK biotek | - | 2CNY001ZZZZZ | Cenobamate API_US | 1 | KG/KG | ⚠ 코드 변환만 (물리적 공정 없음) / US API → ROW1 API 코드 변환 | 1100 | V202 | - | -   |  |
 | 1 | API | 2CNY005ZZZZZ | Cenobamate API_CA_Subcontract | 482 | - | KG | SK biotek | - | 2CNY002ZZZZZ | Cenobamate API_EU | 1 | KG/KG | ⚠ 코드 변환만 (물리적 공정 없음) / EU API → CA API 코드 변환 | 1100 | V202 | - | -   |  |

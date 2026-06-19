@@ -14,7 +14,7 @@ CREATE VIEW v_tariff_by_group AS
 SELECT scenario_group, origin, dest, stage, rate_pct, rate_display, legal_basis, note
 FROM fact_tariff ORDER BY scenario_group, rate_pct DESC;
 
-CREATE TABLE bom_tree (row_id INTEGER PRIMARY KEY AUTOINCREMENT, "level" TEXT, "material_type" TEXT, "material_code" TEXT, "material_description" TEXT, "batch_size_cmo_a" TEXT, "batch_size_cmo_b" TEXT, "unit" TEXT, "cmo_a" TEXT, "cmo_b" TEXT, "input_material_code" TEXT, "input_material_description" TEXT, "conversion_ratio" TEXT, "conversion_unit" TEXT, "note" TEXT, "sap_plant_cmo_a" TEXT, "sloc_cmo_a" TEXT, "sap_plant_cmo_b" TEXT, "sloc_cmo_b" TEXT, input_routes TEXT, route_note TEXT);
+CREATE TABLE bom_tree (row_id INTEGER PRIMARY KEY AUTOINCREMENT, "level" TEXT, "material_type" TEXT, "material_code" TEXT, "material_description" TEXT, "batch_size_cmo_a" TEXT, "batch_size_cmo_b" TEXT, "unit" TEXT, "cmo_a" TEXT, "cmo_b" TEXT, "input_material_code" TEXT, "input_material_description" TEXT, "conversion_ratio" TEXT, "conversion_unit" TEXT, "note" TEXT, "sap_plant_cmo_a" TEXT, "sloc_cmo_a" TEXT, "sap_plant_cmo_b" TEXT, "sloc_cmo_b" TEXT, input_routes TEXT, route_note TEXT, input_group TEXT, input_group_mode TEXT);
 
 CREATE TABLE cmo_summary (row_id INTEGER PRIMARY KEY AUTOINCREMENT, "cmo" TEXT, "country" TEXT, "role" TEXT, "material_type_stage" TEXT, "target_market" TEXT, "key_products" TEXT, "batch_size_range" TEXT, "note" TEXT, "sap_plant" TEXT, "key_storage_locations" TEXT);
 

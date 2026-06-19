@@ -16,6 +16,7 @@
 | 4 | 1~6번 BOM 탭 전체를 SQLite 테이블로 적재 | sqlite 7개 테이블 | 적용됨 |
 | 5 | BOM tree.md 표에 Input Routes 컬럼 추가 | md §1 표 | 적용됨 |
 | 6 | Physician Sample(5CNB2ZAA1SZZ) 대체경로 추가 | bom_tree 1행 | 적용됨 |
+| 7 | API RSM 호환그룹(interchangeable) 반영 | bom_tree 컬럼 2개 + 1행 | 적용됨 |
 
 ---
 
@@ -135,6 +136,26 @@ input에 Tablet+Britestock이 함께 있으면 둘 다 투입이 아니라 **한
 
 → 2경로 자재 총 6종 → **7종**. 도구의 `material_to_routes`가 OR로 자동 인식.
 
+
+## 변경 7 — API RSM 호환그룹(interchangeable input group) 반영
+
+**배경**: API `2CNY001ZZZZZ`(US)의 RSM input 3종(`1CNY001ZZZZZ` US / `1CNY001NZZZZ` US_New / `1CNY002ZZZZZ` EU)은 **상호 대체 가능한 동일 등급**. 기존 note는 "택1"로만 표기됐으나, 실제로는 **택1 또는 복수 조합** 투입.
+
+**route와의 차이**: route(Bottle)는 거치는 공정 경로가 다름. group(RSM)은 같은 역할의 호환 원료(어느 것/몇 개가 와도 동일 공정).
+
+**신규 컬럼** (`bom_tree`):
+- `input_group` TEXT — 형식: `코드,코드,코드:그룹명` (예: `1CNY001ZZZZZ,1CNY001NZZZZ,1CNY002ZZZZZ:RSM_US_INTERCHANGEABLE`)
+- `input_group_mode` TEXT — `ANY_OR_COMBO`(택1 또는 조합)
+
+**적용**: `2CNY001ZZZZZ` 1행. note도 "택1 또는 복수 조합 투입(interchangeable)"으로 정정.
+
+**도구 처리** (`bom_expected_for_nodes`):
+- `material_to_input_groups`로 로딩
+- 그룹 자재 중 하나라도 실측되면 그룹 충족 → 미사용 RSM을 BOM_EXPECTED로 표시 안 함
+- 하나도 미실측이면 대표 1개만 표시(호환자재 중복 방지)
+
+**검증** (합성 3시나리오): US 1종 실측→나머지 missing 없음 / US+EU 조합→나머지 missing 없음 / 미실측→대표 1종만. 전부 PASS. route(Bottle 6종)와 공존 확인.
+
 ## bom_tree 최종 컬럼 (참조)
 
 ```
@@ -142,7 +163,8 @@ row_id, level, material_type, material_code, material_description,
 batch_size_cmo_a, batch_size_cmo_b, unit, cmo_a, cmo_b,
 input_material_code, input_material_description, conversion_ratio, conversion_unit,
 note, sap_plant_cmo_a, sloc_cmo_a, sap_plant_cmo_b, sloc_cmo_b,
-input_routes, route_note          ← 변경 3에서 추가
+input_routes, route_note,         ← 변경 3에서 추가
+input_group, input_group_mode     ← 변경 7에서 추가
 ```
 
 ## 향후 BOM 변경 시 체크리스트

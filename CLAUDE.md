@@ -62,6 +62,17 @@ DB `bom_tree.input_routes` 컬럼(`코드:ROUTE_DIRECT|코드:ROUTE_VIA_BRITESTO
 한 route의 input이 실측되면 그 route 확정 → 다른 route는 BOM_EXPECTED로 띄우지 않음.
 **이 OR 로직을 AND로 되돌리지 말 것** (두 자재가 동시에 FP에 들어가는 것처럼 처리하면 안 됨).
 
+### API RSM 호환그룹 (interchangeable input group) — 중요
+API `2CNY001ZZZZZ`(US)의 RSM input 3종(`1CNY001ZZZZZ`/`1CNY001NZZZZ`/`1CNY002ZZZZZ`)은
+**상호 대체 가능한 동일 등급**이며 **택1 또는 복수 조합**으로 투입됩니다(ANY_OR_COMBO).
+
+DB `bom_tree.input_group`(`코드,코드,코드:그룹명`) / `input_group_mode` 컬럼이 정의합니다.
+`material_to_input_groups`(자재→{group:[codes]})로 로딩되며, `bom_expected_for_nodes`가 처리:
+그룹 자재 중 하나라도 실측되면 그룹 충족 → 미사용 RSM을 BOM_EXPECTED로 띄우지 않음.
+하나도 없으면 그룹 대표 1개만 표시.
+
+**route와 구분**: route는 거치는 공정 경로가 다름(Tablet 직접 vs Britestock 경유). group은 같은 역할의 호환 원료(어느 것이 와도 동일 공정). 둘은 독립적으로 공존.
+
 ## 데이터 흐름
 
 ```
