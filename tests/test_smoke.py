@@ -151,6 +151,15 @@ def test_bottle_or_route_suppresses_tablet():
     assert "3CNY2Z001ZZZ" not in expmats, f"Britestock 경로인데 Tablet 이 BOM 기대로 표시됨: {expmats}"
 
 
+def test_delivery_movements_excluded():
+    # 배송 출고(911)/취소(912)는 계보에서 제외 → 같은 Bottle 다른 배치 간 가짜 전환 없음
+    tool, _ = _build()
+    e = tool.edges
+    bad = e[((e["from_batch"] == "BOTX") & (e["to_batch"] == "BOTY")) |
+            ((e["from_batch"] == "BOTY") & (e["to_batch"] == "BOTX"))]
+    assert bad.empty, f"배송(911/912) 가짜 전환 엣지 생성됨: {list(zip(bad.from_batch, bad.to_batch))}"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함

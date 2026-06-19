@@ -62,7 +62,7 @@ MOVEMENT_CLASS = {
     "production_consume": {543, 541},           # 외주 component 소비/출고
     "transfer": {301, 303, 305, 311, 313, 315}, # 재고/위치 이동
     "reversal": {102, 542, 544, 532, 922, 926}, # 취소(역분개)
-    "exclude": {921, 925},                      # 시장출고/판매성
+    "exclude": {921, 925, 911, 912},            # 시장출고/판매성·배송출고(911)/배송취소(912)
 }
 DEFAULT_EXCLUDE_MOVEMENTS = set(MOVEMENT_CLASS["exclude"])
 DEFAULT_REVERSAL_MOVEMENTS = set(MOVEMENT_CLASS["reversal"])
@@ -1518,7 +1518,8 @@ def parse_args(argv=None):
     p.add_argument("--out", default="genealogy_out")
     p.add_argument("--export-xlsx", action="store_true")
     p.add_argument("--include-reversals", action="store_true")
-    p.add_argument("--exclude-movements", default="921,925")
+    p.add_argument("--exclude-movements", default="921,925,911,912",
+                   help="계보 제외 movement(시장출고·배송출고/취소 등). 기본 921,925,911,912")
     p.add_argument("--no-split-matching", action="store_true", help="1:1 매칭만(하위호환)")
     p.add_argument("--strict-dates", action="store_true", help="날짜 역전 엣지 제외")
     p.add_argument("--pairing-mode", choices=["legacy", "bom-aware"], default="bom-aware",

@@ -163,6 +163,14 @@ def build_rows() -> list[dict]:
         _row("DOC_BOT", 1, "4CNR2ZA001ZZ", "BRIT", "4100", 543, -50.0, "2026-12-02"),
         _row("DOC_BOT", 2, "5CNB2ZAA1ZZZ", "BOT", "5100", 101, +50.0, "2026-12-02"),
     ]
+
+    # --- 케이스 13: 배송 출고(911)/취소(912) — 같은 Bottle 다른 배치, 같은 Reference ---
+    # 판매/출하 이동이라 계보와 무관. 같은 Reference 로 911(음수)↔912(양수)가 REF_PO_ITEM
+    # 으로 짝지어져 가짜 전환(BOTX↔BOTY)을 만들면 안 됨 → 제외 movement 로 차단.
+    r += [
+        _row("DOC_DLV_A", 1, "5CNB2ZAA1ZZZ", "BOTX", "5100", 911, -10.0, "2026-12-10", ref="DLV1"),
+        _row("DOC_DLV_B", 1, "5CNB2ZAA1ZZZ", "BOTY", "5100", 912, +10.0, "2026-12-11", ref="DLV1"),
+    ]
     return r
 
 
