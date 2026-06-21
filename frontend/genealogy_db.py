@@ -393,10 +393,17 @@ def dot_to_html(dot: str, title: str = "Genealogy") -> str:
 <script src="https://cdn.jsdelivr.net/npm/@hpcc-js/wasm@2/dist/graphviz.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/d3-graphviz@5/build/d3-graphviz.min.js"></script>
 </head><body>
-<div id="bar"><b>{t}</b> — 휠=확대/축소, 드래그=이동. 전체가 한 화면에 맞춰 그려집니다.</div>
+<div id="bar"><b>{t}</b> — 휠=위아래 스크롤, <b>Ctrl+휠=확대/축소</b>, 드래그=이동.</div>
 <div id="graph"></div>
 <script>
   const dot = `{safe}`;
-  d3.select("#graph").graphviz({{useWorker:false}}).fit(true).zoom(true).renderDot(dot);
+  const gv = d3.select("#graph").graphviz({{useWorker:false}}).fit(true).zoom(true);
+  gv.renderDot(dot, function() {{
+    try {{
+      const zb = gv.zoomBehavior();
+      // 휠 단독=확대 금지(페이지 스크롤로 통과), Ctrl+휠일 때만 확대/축소. 드래그 패닝 허용.
+      if (zb) zb.filter(function(e) {{ return e.type === 'wheel' ? e.ctrlKey : !e.button; }});
+    }} catch (err) {{}}
+  }});
 </script>
 </body></html>"""

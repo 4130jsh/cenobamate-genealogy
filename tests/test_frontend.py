@@ -222,6 +222,8 @@ def test_dot_to_html_full_graph():
     html = gdb.dot_to_html(dot, "테스트")
     assert "<html" in html and "renderDot" in html
     assert "a -> b" in html and ".fit(true)" in html  # 전체 맞춤 렌더
+    # 휠 단독은 확대 금지, Ctrl+휠만 확대 (페이지 스크롤 통과)
+    assert "e.ctrlKey" in html and "'wheel'" in html
 
 
 def _run_all() -> int:
