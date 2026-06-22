@@ -161,6 +161,7 @@ def test_node_label_has_description():
     # API-B1 노드 라벨에 자재 설명이 포함돼야 함
     assert "Cenobamate API_US" in dot, "노드 라벨에 자재 설명이 안 들어감"
     assert "[API-B1]" in dot, "배치는 [..] 형태로 라벨에 있어야 함"
+    assert "Plant 1100" in dot, "노드 라벨에 Plant(공장)가 표시돼야 함"
 
 
 def test_interchangeable_group_frontend():

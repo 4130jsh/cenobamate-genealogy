@@ -280,15 +280,19 @@ def _san(text: str, maxlen: int = 34) -> str:
     return (t[:maxlen] + "…") if len(t) > maxlen else t
 
 
-def _label_full(node: str, desc: str = "") -> str:
-    """자재코드 + (설명) + [배치] 3줄 라벨."""
+def _label_full(node: str, desc: str = "", plant: str = "") -> str:
+    """자재코드 + (설명) + [배치] + (Plant) 라벨."""
     mat, _, batch = str(node).partition("||")
     parts = [mat]
     d = _san(desc)
     if d:
         parts.append(d)
-    if batch:
-        parts.append(f"[{batch}]")
+    last = f"[{batch}]" if batch else ""
+    p = _san(plant, 24)
+    if p:
+        last = (last + "  " if last else "") + f"Plant {p}"
+    if last:
+        parts.append(last)
     return "\\n".join(parts)
 
 
@@ -302,6 +306,7 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
     """
     node_lookup = dict(zip(nodes_df["node"], nodes_df.get("tier", ""))) if not nodes_df.empty else {}
     node_desc = dict(zip(nodes_df["node"], nodes_df.get("description", ""))) if not nodes_df.empty else {}
+    node_plant = dict(zip(nodes_df["node"], nodes_df.get("plant", ""))) if not nodes_df.empty else {}
     mat_desc: Dict[str, str] = {}
     if not nodes_df.empty and "material" in nodes_df.columns:
         for m, d in zip(nodes_df["material"], nodes_df.get("description", "")):
@@ -325,6 +330,9 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
     lines = [
         "digraph genealogy {",
         "  rankdir=LR;",                      # RSM(좌) → FP(우): 자재 흐름 방향
+        "  ranksep=1.4;",                     # tier 간 간격 ↑ → 엣지 길어져 날짜 라벨 겹침 완화
+        "  nodesep=0.45;",                    # 같은 tier 노드 간격 ↑ → fan-in 엣지/라벨 분산
+        "  forcelabels=true;",
         "  node [shape=box, style=\"rounded,filled\", fontsize=10, fontname=\"Arial\"];",
         "  edge [fontsize=8, fontname=\"Arial\"];",
     ]
@@ -333,7 +341,7 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
         t = tier_of(n)
         fill = TIER_COLOR.get(t, "#bdbdbd")
         pen = ' penwidth=3 color="#000000"' if n == start_node else ""
-        lines.append(f'  {nid[n]} [label="{_label_full(n, node_desc.get(n, ""))}", fillcolor="{fill}", fontcolor="white"{pen}];')
+        lines.append(f'  {nid[n]} [label="{_label_full(n, node_desc.get(n, ""), node_plant.get(n, ""))}", fillcolor="{fill}", fontcolor="white"{pen}];')
         by_tier.setdefault(t, []).append(nid[n])
 
     # BOM_EXPECTED: 실측 없는 기대 상류를 점선 노드+점선 엣지로
