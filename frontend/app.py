@@ -88,7 +88,8 @@ def main() -> None:
         st.info("결과가 비어 있습니다. 빌드를 먼저 수행하세요.")
         st.stop()
 
-    tabs = st.tabs(["⬆️ 상류 (FP→RSM)", "⬇️ 하류 (RSM→FP)", "📋 노드/엣지", "🗂 빌드·적재 이력"])
+    tabs = st.tabs(["⬆️ 상류 (FP→RSM)", "⬇️ 하류 (RSM→FP)", "🔎 흐름 검색",
+                    "📋 노드/엣지", "🗂 빌드·적재 이력"])
 
     # ── Tab 1: 상류 그래프 + BOM_EXPECTED ─────────────────────
     with tabs[0]:
@@ -122,8 +123,12 @@ def main() -> None:
             else:
                 _render_trace(nodes, sub, visited, sel, "downstream", None, "down", plant_map)
 
-    # ── Tab 3: 노드/엣지 테이블 ──────────────────────────────
+    # ── Tab 3: 흐름 검색 (멀티 조건 필터) ────────────────────
     with tabs[2]:
+        _render_flow_search(edges, nodes)
+
+    # ── Tab 4: 노드/엣지 테이블 ──────────────────────────────
+    with tabs[3]:
         st.subheader("노드")
         c1, c2 = st.columns([2, 2])
         nq = c1.text_input("노드 검색(material/batch)")
@@ -134,8 +139,8 @@ def main() -> None:
         ev = edges if not kind_filter else edges[edges["edge_kind"].isin(kind_filter)]
         st.dataframe(ev, use_container_width=True, hide_index=True)
 
-    # ── Tab 4: 이력 ─────────────────────────────────────────
-    with tabs[3]:
+    # ── Tab 5: 이력 ─────────────────────────────────────────
+    with tabs[4]:
         st.subheader("빌드 이력 (build_runs)")
         st.dataframe(runs, use_container_width=True, hide_index=True)
         st.subheader("적재 이력 (ingest_log)")
@@ -183,6 +188,56 @@ def _render_trace(nodes, sub, visited, sel, direction, exp, keyp, plant_map=None
             st.dataframe(exp, use_container_width=True, hide_index=True)
     with st.expander("이 경로의 실측 엣지 테이블(상세)"):
         _edge_table(sub_f)
+
+
+def _render_flow_search(edges, nodes) -> None:
+    """멀티 조건(기간·tier·저장위치·전환유형·텍스트)으로 자재 흐름을 검색하는 탭."""
+    st.caption("기간·자재 tier·저장위치·전환/이동 유형을 멀티 선택해 해당 자재 흐름(엣지)을 검색한다. "
+               "조건은 AND, 각 항목 내부는 OR.")
+    c1, c2 = st.columns(2)
+    tiers = c1.multiselect("자재 Tier (흐름의 한쪽이라도 걸치면 포함)",
+                           ["RSM", "API", "DP", "SP", "FP", "OTHER"], default=[], key="fs_tier")
+    kinds = c2.multiselect("전환/이동 유형", ["PROD", "REF_PO_ITEM", "DOC_TRANSFER"],
+                           default=[], key="fs_kind")
+    locations = st.multiselect("저장위치(storage location)", gdb.location_options(nodes),
+                               default=[], key="fs_loc")
+    query = st.text_input("자재/배치 텍스트 검색(선택)", key="fs_q")
+
+    dmin, dmax = gdb.edge_date_bounds(edges)
+    date_from = date_to = None
+    if dmin and dmax and dmin < dmax:
+        date_from, date_to = st.slider("전기일 기간", dmin, dmax, (dmin, dmax), key="fs_date")
+    elif dmin:
+        st.caption(f"전기일: {dmin}")
+
+    date_filtered = bool(date_from) and (date_from, date_to) != (dmin, dmax)
+    if not (tiers or kinds or locations or query or date_filtered):
+        st.info("위 조건을 하나 이상 선택하면 해당 흐름을 검색합니다.")
+        return
+
+    res = gdb.flow_search(edges, nodes, tiers=tiers, locations=locations, kinds=kinds,
+                          date_from=date_from, date_to=date_to, query=query)
+    st.markdown(_legend_md(), unsafe_allow_html=True)
+    st.caption(f"검색된 흐름(엣지): {len(res):,} / 전체 {len(edges):,}")
+    if res.empty:
+        st.info("조건에 맞는 흐름이 없습니다.")
+        return
+
+    GRAPH_CAP = 200
+    if len(res) <= GRAPH_CAP:
+        dot = gdb.build_dot(res, nodes, "", "upstream", show_dates=True)
+        _graph_with_downloads(dot, "흐름 검색 결과", "flow")
+    else:
+        st.warning(f"엣지가 많아({len(res):,} > {GRAPH_CAP}) 그래프는 생략했습니다. "
+                   "조건을 좁히거나 아래 타임라인/표를 이용하세요.")
+
+    st.subheader("🕒 타임라인 (전기일 순)")
+    st.dataframe(gdb.timeline_table(res), use_container_width=True, hide_index=True)
+    with st.expander(f"엣지 테이블(상세) — {len(res):,}건"):
+        _edge_table(res)
+    st.download_button("⬇️ 검색결과 CSV", res.to_csv(index=False).encode("utf-8-sig"),
+                       file_name="flow_search.csv", mime="text/csv",
+                       key="fs_dl", use_container_width=True)
 
 
 def _graph_with_downloads(dot: str, title: str, key: str) -> None:

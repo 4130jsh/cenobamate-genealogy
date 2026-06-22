@@ -165,6 +165,67 @@ def search_nodes(nodes_df: pd.DataFrame, query: str = "", tiers: Optional[List[s
     return sub.sort_values(cols) if cols else sub
 
 
+def location_options(nodes_df: pd.DataFrame) -> List[str]:
+    """노드 location(저장위치) 값을 콤마 분해해 유니크 옵션 목록으로(흐름검색 UI 용)."""
+    if nodes_df.empty or "location" not in nodes_df.columns:
+        return []
+    toks: Set[str] = set()
+    for v in nodes_df["location"].fillna(""):
+        for t in str(v).split(","):
+            t = t.strip()
+            if t:
+                toks.add(t)
+    return sorted(toks)
+
+
+def flow_search(edges_df: pd.DataFrame, nodes_df: pd.DataFrame,
+                tiers: Optional[List[str]] = None, locations: Optional[List[str]] = None,
+                kinds: Optional[List[str]] = None, date_from=None, date_to=None,
+                query: str = "") -> pd.DataFrame:
+    """멀티 조건(기간·tier·저장위치·전환유형·텍스트)으로 자재 흐름(엣지) 필터.
+
+    - tiers: from_tier 또는 to_tier 가 선택 tier 에 속하는 엣지(흐름의 한쪽이라도 걸치면 포함)
+    - locations: 엣지 양끝 노드의 location(저장위치)에 선택 토큰이 포함되면 포함
+    - kinds: edge_kind(PROD/REF_PO_ITEM/DOC_TRANSFER)
+    - date_from/date_to: posting_date(전기일) 범위 [from, to] (둘 중 하나만도 가능)
+    - query: material/batch 부분일치(from/to 양쪽 대상)
+    조건은 AND 로 결합(각 조건 내부는 OR). 빈 조건은 무시.
+    """
+    if edges_df.empty:
+        return edges_df
+    df = edges_df
+    if tiers:
+        ts = set(tiers)
+        df = df[df["from_tier"].isin(ts) | df["to_tier"].isin(ts)]
+    if kinds:
+        df = df[df["edge_kind"].isin(kinds)]
+    if (date_from or date_to) and "posting_date" in df.columns:
+        d = pd.to_datetime(df["posting_date"], errors="coerce").dt.date
+        keep = d.notna()
+        if date_from:
+            keep &= d >= date_from
+        if date_to:
+            keep &= d <= date_to
+        df = df[keep]
+    if locations and not df.empty:
+        node_loc = dict(zip(nodes_df["node"], nodes_df["location"])) \
+            if (not nodes_df.empty and "location" in nodes_df.columns) else {}
+        fl = df["from_node"].map(node_loc).fillna("")
+        tl = df["to_node"].map(node_loc).fillna("")
+        mask = pd.Series(False, index=df.index)
+        for loc in locations:
+            mask |= fl.str.contains(loc, regex=False) | tl.str.contains(loc, regex=False)
+        df = df[mask]
+    q = (query or "").strip().upper()
+    if q and not df.empty:
+        cols = [c for c in ["from_material", "from_batch", "to_material", "to_batch"] if c in df.columns]
+        m = pd.Series(False, index=df.index)
+        for c in cols:
+            m |= df[c].fillna("").str.upper().str.contains(q, regex=False)
+        df = df[m]
+    return df
+
+
 def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_expected: pd.DataFrame,
                      nodes_df: pd.DataFrame, legacy_map: Optional[Dict[str, str]] = None) -> List[dict]:
     """서브그래프 각 노드에서 BOM 상 기대되지만 실측 상류 엣지가 없는 입력 목록.
@@ -335,7 +396,7 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
             if m and m not in mat_desc and d:
                 mat_desc[m] = d
     edge_tier: Dict[str, str] = {}
-    universe: Set[str] = {start_node}
+    universe: Set[str] = {start_node} if start_node else set()
     for _, r in sub_edges.iterrows():
         universe.add(r["from_node"]); universe.add(r["to_node"])
         if r.get("from_tier"):

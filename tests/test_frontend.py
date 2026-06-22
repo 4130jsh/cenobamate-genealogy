@@ -264,6 +264,67 @@ def test_dot_to_html_full_graph():
     assert "e.ctrlKey" in html and "'wheel'" in html
 
 
+def test_flow_search_filters():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+
+    # 저장위치 옵션이 노드 location 에서 추출됨
+    opts = gdb.location_options(nodes)
+    assert any("S/L" in o or "Sub3089" in o for o in opts), f"저장위치 옵션 추출 실패: {opts[:5]}"
+
+    # tier 필터: API 가 한쪽이라도 걸친 엣지만
+    api = gdb.flow_search(edges, nodes, tiers=["API"])
+    assert not api.empty and (api["from_tier"].eq("API") | api["to_tier"].eq("API")).all()
+
+    # 전환유형 필터
+    prod = gdb.flow_search(edges, nodes, kinds=["PROD"])
+    assert not prod.empty and prod["edge_kind"].eq("PROD").all()
+
+    # 조건 AND 결합: tier+kind 동시
+    both = gdb.flow_search(edges, nodes, tiers=["API"], kinds=["PROD"])
+    assert len(both) <= min(len(api), len(prod))
+
+    # 텍스트 검색(from/to 양쪽 대상)
+    q = gdb.flow_search(edges, nodes, query="API-B1")
+    assert not q.empty
+    assert q.apply(lambda r: "API-B1" in f'{r["from_batch"]}{r["to_batch"]}', axis=1).all()
+
+    # 빈 조건이면 전체 반환(상위 UI 에서 게이팅)
+    assert len(gdb.flow_search(edges, nodes)) == len(edges)
+
+
+def test_flow_search_date_and_location():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    lo, hi = gdb.edge_date_bounds(edges)
+    # 전 범위면 날짜 있는 엣지 전부 유지
+    full = gdb.flow_search(edges, nodes, date_from=lo, date_to=hi)
+    import pandas as pd
+    dated = edges["posting_date"].map(lambda s: bool(str(s or "").strip())).sum()
+    assert len(full) == dated
+
+    # 저장위치 필터로 좁힌 결과는 전체 이하이고 양끝 중 하나가 해당 위치
+    opts = gdb.location_options(nodes)
+    if opts:
+        loc = opts[0]
+        node_loc = dict(zip(nodes["node"], nodes["location"]))
+        r = gdb.flow_search(edges, nodes, locations=[loc])
+        assert len(r) <= len(edges)
+        ok = r.apply(lambda x: loc in str(node_loc.get(x["from_node"], "")) or
+                     loc in str(node_loc.get(x["to_node"], "")), axis=1)
+        assert ok.all() if not r.empty else True
+
+
+def test_build_dot_no_start_node():
+    # 흐름검색은 시작노드 없이 임의 엣지집합을 렌더 → 빈 노드 박스가 생기면 안 됨
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    res = gdb.flow_search(edges, nodes, kinds=["PROD"])
+    dot = gdb.build_dot(res, nodes, "", "upstream", show_dates=True)
+    assert "digraph" in dot and "->" in dot
+    assert 'label=""' not in dot, "시작노드 없이 빈 라벨 노드가 생성됨"
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
