@@ -33,6 +33,7 @@ def _load(db_path: str, mtime: float):
         "ingest": gdb.load_ingest_log(db_path),
         "bom_expected": gdb.load_bom_expected(db_path),
         "legacy": gdb.load_legacy_map(db_path),
+        "plant_map": gdb.load_plant_map(db_path),
     }
 
 
@@ -72,6 +73,7 @@ def main() -> None:
     data = _load(db_path, os.path.getmtime(db_path))
     edges, nodes, runs = data["edges"], data["nodes"], data["runs"]
     ingest, bom_expected, legacy = data["ingest"], data["bom_expected"], data["legacy"]
+    plant_map = data["plant_map"]
 
     if not runs.empty:
         r = runs.iloc[0]
@@ -103,7 +105,7 @@ def main() -> None:
                 st.info("이 배치의 실측 상류 엣지가 없습니다(단일 export 범위 한계일 수 있음).")
             else:
                 exp = gdb.expected_missing(visited, edges, bom_expected, nodes, legacy) if show_exp else None
-                _render_trace(nodes, sub, visited, sel, "upstream", exp, "up")
+                _render_trace(nodes, sub, visited, sel, "upstream", exp, "up", plant_map)
 
     # ── Tab 2: 하류 그래프 ───────────────────────────────────
     with tabs[1]:
@@ -118,7 +120,7 @@ def main() -> None:
             if sub.empty:
                 st.info("이 배치의 실측 하류 엣지가 없습니다.")
             else:
-                _render_trace(nodes, sub, visited, sel, "downstream", None, "down")
+                _render_trace(nodes, sub, visited, sel, "downstream", None, "down", plant_map)
 
     # ── Tab 3: 노드/엣지 테이블 ──────────────────────────────
     with tabs[2]:
@@ -150,7 +152,7 @@ def _edge_table(sub):
     st.dataframe(sub[cols], use_container_width=True, hide_index=True)
 
 
-def _render_trace(nodes, sub, visited, sel, direction, exp, keyp):
+def _render_trace(nodes, sub, visited, sel, direction, exp, keyp, plant_map=None):
     """날짜 범위 필터 + 날짜 라벨 + 그래프 + 타임라인 + 엣지 테이블."""
     c1, c2 = st.columns([1, 2])
     show_dates = c1.checkbox("엣지에 날짜 표시", value=True, key=f"sd_{keyp}")
@@ -162,7 +164,7 @@ def _render_trace(nodes, sub, visited, sel, direction, exp, keyp):
     elif dmin:
         c2.caption(f"전기일: {dmin}")
 
-    dot = gdb.build_dot(sub_f, nodes, sel, direction, expected=exp, show_dates=show_dates)
+    dot = gdb.build_dot(sub_f, nodes, sel, direction, expected=exp, show_dates=show_dates, plant_map=plant_map)
     _graph_with_downloads(dot, f"{'상류' if direction=='upstream' else '하류'} {sel}", f"{keyp}_{sel}")
 
     cap = f"노드 {len(visited)}개 · 표시 엣지 {len(sub_f)}/{len(sub)}개"

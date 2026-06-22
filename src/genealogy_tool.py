@@ -202,6 +202,7 @@ class BomMaster:
     material_to_routes: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
     material_to_input_groups: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
     interchangeable: Dict[str, Set[str]] = field(default_factory=dict)
+    plant_name: Dict[str, str] = field(default_factory=dict)
 
 
 # ============================================================
@@ -383,6 +384,7 @@ class GenealogyTool:
                 material_to_desc.setdefault(legacy_code, clean_str(r.get("material_description", "")))
 
         plant_role = {clean_str(r.get("plant_code", "")): clean_str(r.get("mapped_cmo_role", "")) for _, r in plant.iterrows()}
+        plant_name = {clean_str(r.get("plant_code", "")): clean_str(r.get("plant_name", "")) for _, r in plant.iterrows()}
         sloc_stage = {(clean_str(r.get("plant", "")), clean_code(r.get("location", ""))): clean_str(r.get("material_stage", "")) for _, r in sloc.iterrows()}
         sloc_desc = {(clean_str(r.get("plant", "")), clean_code(r.get("location", ""))): clean_str(r.get("description", "")) for _, r in sloc.iterrows()}
 
@@ -396,7 +398,7 @@ class GenealogyTool:
 
         return BomMaster(material, bom_edges, plant, sloc, legacy, material_to_tier, material_to_desc,
                          dict(material_to_inputs), legacy_to_current, plant_role, sloc_stage, sloc_desc,
-                         material_to_routes, material_to_input_groups, dict(interchangeable))
+                         material_to_routes, material_to_input_groups, dict(interchangeable), plant_name)
 
     @staticmethod
     def tier_from_bom_row(r: pd.Series) -> str:
@@ -1401,6 +1403,12 @@ class GenealogyTool:
                  for k, v in self.bom.legacy_to_current.items()],
                 columns=["run_id", "legacy_code", "current_code"])
             legacy_df.to_sql("gen_legacy_map", con, if_exists=mode, index=False)
+            # plant_code → plant_name 매핑 (frontend 노드 공장명 표시용)
+            plant_df = pd.DataFrame(
+                [{"run_id": run_id, "plant_code": k, "plant_name": v}
+                 for k, v in self.bom.plant_name.items() if k],
+                columns=["run_id", "plant_code", "plant_name"])
+            plant_df.to_sql("gen_plant_map", con, if_exists=mode, index=False)
             cur.execute("INSERT OR REPLACE INTO build_runs VALUES (?,?,?,?,?,?,?,?,?,?)", (
                 run_id, built_at, json.dumps(self.sap_files, ensure_ascii=False), self.bom_db,
                 self.pairing_mode, len(self.rows), len(self.edges), len(self.nodes),

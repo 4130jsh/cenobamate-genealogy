@@ -115,8 +115,28 @@ def load_legacy_map(db_path: str, run_id: Optional[str] = None) -> Dict[str, str
         con.close()
 
 
+def load_plant_map(db_path: str) -> Dict[str, str]:
+    """plant_code → plant_name 매핑 (없으면 빈 dict)."""
+    con = sqlite3.connect(db_path)
+    try:
+        if not _table_exists(con, "gen_plant_map"):
+            return {}
+        df = pd.read_sql_query("SELECT DISTINCT plant_code, plant_name FROM gen_plant_map", con)
+        return {str(k): v for k, v in zip(df["plant_code"], df["plant_name"]) if v}
+    finally:
+        con.close()
+
+
 def _norm(material: str, legacy_map: Dict[str, str]) -> str:
     return legacy_map.get(material, material)
+
+
+def _map_plant(plant_str: str, plant_map: Dict[str, str]) -> str:
+    """'1100,1210' → '본사, Patheon' 처럼 공장코드를 공장명으로 매핑."""
+    if not plant_str:
+        return ""
+    parts = [p.strip() for p in str(plant_str).split(",") if p.strip()]
+    return ", ".join((plant_map or {}).get(p, p) for p in parts)
 
 
 # ----------------------------------------------------------------------
@@ -287,18 +307,17 @@ def _label_full(node: str, desc: str = "", plant: str = "") -> str:
     d = _san(desc)
     if d:
         parts.append(d)
-    last = f"[{batch}]" if batch else ""
-    p = _san(plant, 24)
+    if batch:
+        parts.append(f"[{batch}]")
+    p = _san(plant, 40)
     if p:
-        last = (last + "  " if last else "") + f"Plant {p}"
-    if last:
-        parts.append(last)
+        parts.append(f"공장: {p}")
     return "\\n".join(parts)
 
 
 def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
               direction: str = "upstream", expected: Optional[List[dict]] = None,
-              show_dates: bool = False) -> str:
+              show_dates: bool = False, plant_map: Optional[Dict[str, str]] = None) -> str:
     """tier 를 좌→우 컬럼(RSM…FP)으로 정렬한 Graphviz DOT 문자열.
 
     노드 집합은 서브그래프 엣지(+시작 노드)로 엄격히 한정한다(전체 warehouse 아님).
@@ -341,7 +360,8 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
         t = tier_of(n)
         fill = TIER_COLOR.get(t, "#bdbdbd")
         pen = ' penwidth=3 color="#000000"' if n == start_node else ""
-        lines.append(f'  {nid[n]} [label="{_label_full(n, node_desc.get(n, ""), node_plant.get(n, ""))}", fillcolor="{fill}", fontcolor="white"{pen}];')
+        plabel = _map_plant(node_plant.get(n, ""), plant_map)
+        lines.append(f'  {nid[n]} [label="{_label_full(n, node_desc.get(n, ""), plabel)}", fillcolor="{fill}", fontcolor="white"{pen}];')
         by_tier.setdefault(t, []).append(nid[n])
 
     # BOM_EXPECTED: 실측 없는 기대 상류를 점선 노드+점선 엣지로
