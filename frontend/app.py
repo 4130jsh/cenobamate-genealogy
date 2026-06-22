@@ -194,6 +194,9 @@ def _render_flow_search(edges, nodes) -> None:
     """멀티 조건(기간·tier·저장위치·전환유형·텍스트)으로 자재 흐름을 검색하는 탭."""
     st.caption("기간·자재 tier·저장위치·전환/이동 유형을 멀티 선택해 해당 자재 흐름(엣지)을 검색한다. "
                "조건은 AND, 각 항목 내부는 OR.")
+    with st.expander("ℹ️ 전환/이동 유형 설명"):
+        for kind, desc in gdb.edge_kind_legend():
+            st.markdown(f"- **{kind}** — {desc}")
     c1, c2 = st.columns(2)
     tiers = c1.multiselect("자재 Tier (흐름의 한쪽이라도 걸치면 포함)",
                            ["RSM", "API", "DP", "SP", "FP", "OTHER"], default=[], key="fs_tier")
@@ -210,15 +213,22 @@ def _render_flow_search(edges, nodes) -> None:
     elif dmin:
         st.caption(f"전기일: {dmin}")
 
+    incl_up = st.checkbox("검색된 자재의 상류 전체 흐름 함께 표시", value=True, key="fs_up",
+                          help="매칭된 흐름뿐 아니라 그 자재들이 어디서 왔는지(RSM 방향) 전체 상류 경로를 합쳐서 보여준다.")
+
     date_filtered = bool(date_from) and (date_from, date_to) != (dmin, dmax)
     if not (tiers or kinds or locations or query or date_filtered):
         st.info("위 조건을 하나 이상 선택하면 해당 흐름을 검색합니다.")
         return
 
-    res = gdb.flow_search(edges, nodes, tiers=tiers, locations=locations, kinds=kinds,
-                          date_from=date_from, date_to=date_to, query=query)
+    matched = gdb.flow_search(edges, nodes, tiers=tiers, locations=locations, kinds=kinds,
+                              date_from=date_from, date_to=date_to, query=query)
+    res = gdb.expand_flow_upstream(edges, matched) if incl_up else matched
     st.markdown(_legend_md(), unsafe_allow_html=True)
-    st.caption(f"검색된 흐름(엣지): {len(res):,} / 전체 {len(edges):,}")
+    if incl_up and len(res) > len(matched):
+        st.caption(f"검색 매칭 {len(matched):,}건 + 상류 {len(res) - len(matched):,}건 = 표시 {len(res):,} / 전체 {len(edges):,}")
+    else:
+        st.caption(f"검색된 흐름(엣지): {len(res):,} / 전체 {len(edges):,}")
     if res.empty:
         st.info("조건에 맞는 흐름이 없습니다.")
         return

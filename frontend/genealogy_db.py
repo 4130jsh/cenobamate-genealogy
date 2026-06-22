@@ -535,6 +535,37 @@ def tier_legend() -> List[Tuple[str, str]]:
     return [(t, TIER_COLOR[t]) for t in ["RSM", "API", "DP", "SP", "FP"]]
 
 
+def edge_kind_legend() -> List[Tuple[str, str]]:
+    """전환/이동 유형(edge_kind) 설명 — 흐름검색/범례 UI 용."""
+    return [
+        ("PROD",
+         "생산: 같은 생산문서에서 원료 소비(543/541)와 제품 산출(101)이 함께 일어난 실제 제조 전환."),
+        ("REF_PO_ITEM",
+         "외주/구매 연계: 같은 Reference+PO+Item 으로 묶인 출고↔입고. 문서가 달라도 동일 거래(외주가공 등)로 연결."),
+        ("DOC_TRANSFER",
+         "문서 내 이동: 같은 자재문서 안의 음수→양수 이동(공정·공장·저장위치 이전 등)."),
+        ("이전(회색 점선)",
+         "공장이전/재배치: 같은 자재의 다른 배치 간 이동 표시(제조 전환이 아님). 그래프에서만 점선으로 구분."),
+    ]
+
+
+def expand_flow_upstream(edges_df: pd.DataFrame, seed_edges: pd.DataFrame,
+                         max_depth: int = 30) -> pd.DataFrame:
+    """seed_edges(검색 매칭 엣지)에 등장하는 모든 노드의 상류 흐름을 합쳐 반환.
+
+    매칭된 자재 흐름뿐 아니라 그 자재들이 '어디서 왔는지' 전체 상류 경로를 포함한다.
+    중복 엣지는 원본 인덱스 기준으로 제거하고 (매칭분 + 상류분) 합집합을 돌려준다.
+    """
+    if seed_edges.empty or edges_df.empty:
+        return seed_edges
+    collected: Set = set(seed_edges.index)
+    seeds = set(seed_edges["from_node"]) | set(seed_edges["to_node"])
+    for s in seeds:
+        sub, _, _ = trace_subgraph(edges_df, s, "upstream", max_depth=max_depth)
+        collected |= set(sub.index)
+    return edges_df.loc[sorted(collected)].copy()
+
+
 def dot_to_html(dot: str, title: str = "Genealogy") -> str:
     """DOT 를 브라우저에서 전체 화면에 맞춰(fit) 렌더하는 독립 HTML.
 

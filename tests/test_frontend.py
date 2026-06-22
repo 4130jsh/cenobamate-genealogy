@@ -325,6 +325,26 @@ def test_build_dot_no_start_node():
     assert 'label=""' not in dot, "시작노드 없이 빈 라벨 노드가 생성됨"
 
 
+def test_flow_search_includes_upstream():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    matched = gdb.flow_search(edges, nodes, query="FP-B1")
+    assert not matched.empty, "FP-B1 매칭 흐름이 없음"
+    expanded = gdb.expand_flow_upstream(edges, matched)
+    assert len(expanded) > len(matched), "상류 흐름이 합쳐지지 않음"
+    assert set(matched.index).issubset(set(expanded.index)), "매칭 엣지가 결과에 누락"
+    # 상류에 RSM→API 제조(PROD) 엣지가 포함돼야 함
+    assert ((expanded["from_tier"] == "RSM") & (expanded["to_tier"] == "API")).any(), \
+        "상류 RSM→API 엣지가 포함되지 않음"
+
+
+def test_edge_kind_legend():
+    leg = gdb.edge_kind_legend()
+    kinds = {k for k, _ in leg}
+    assert {"PROD", "REF_PO_ITEM", "DOC_TRANSFER"}.issubset(kinds), f"유형 누락: {kinds}"
+    assert all(d.strip() for _, d in leg), "설명이 비어 있는 항목이 있음"
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
