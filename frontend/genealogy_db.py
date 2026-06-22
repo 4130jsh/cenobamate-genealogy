@@ -401,8 +401,14 @@ def dot_to_html(dot: str, title: str = "Genealogy") -> str:
   gv.renderDot(dot, function() {{
     try {{
       const zb = gv.zoomBehavior();
-      // 휠 단독=확대 금지(페이지 스크롤로 통과), Ctrl+휠일 때만 확대/축소. 드래그 패닝 허용.
-      if (zb) zb.filter(function(e) {{ return e.type === 'wheel' ? e.ctrlKey : !e.button; }});
+      if (zb) {{
+        // 휠 단독=확대 금지(페이지 스크롤로 통과), Ctrl+휠일 때만 확대/축소. 드래그 패닝 허용.
+        zb.filter(function(e) {{ return e.type === 'wheel' ? e.ctrlKey : !e.button; }});
+        // 휠 한 틱당 확대 폭을 촘촘하게(기본의 약 1/4)
+        zb.wheelDelta(function(e) {{
+          return -e.deltaY * (e.deltaMode === 1 ? 0.0125 : e.deltaMode ? 0.25 : 0.0005);
+        }});
+      }}
     }} catch (err) {{}}
   }});
 </script>
