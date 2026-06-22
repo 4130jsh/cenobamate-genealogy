@@ -161,10 +161,12 @@ def test_node_label_has_description():
     # API-B1 노드 라벨에 자재 설명이 포함돼야 함
     assert "Cenobamate API_US" in dot, "노드 라벨에 자재 설명이 안 들어감"
     assert "[API-B1]" in dot, "배치는 [..] 형태로 라벨에 있어야 함"
-    assert "공장:" in dot and "1100" in dot, "노드 라벨에 공장(Plant)이 표시돼야 함"
-    # plant_map 전달 시 공장 코드가 공장명으로 매핑돼야 함
-    dot2 = gdb.build_dot(sub, nodes, start, "upstream", plant_map={"1100": "SK BP 본사"})
-    assert "SK BP 본사" in dot2, "plant_map 으로 공장명 매핑이 안 됨"
+    # 저장위치(storage location) 표시: API-B1(sloc 1104 → 'Sub3089DSVYJ')
+    assert "위치:" in dot and "Sub3089DSVYJ" in dot, "노드 라벨에 저장위치(storage location)가 표시돼야 함"
+    # location 컬럼이 없는 (구) 결과 DB 는 plant_map 으로 공장명 fallback
+    nodes_noloc = nodes.drop(columns=["location"])
+    dot2 = gdb.build_dot(sub, nodes_noloc, start, "upstream", plant_map={"1100": "SK BP 본사"})
+    assert "SK BP 본사" in dot2, "location 없을 때 plant_map 공장명 fallback 이 안 됨"
 
 
 def test_interchangeable_group_frontend():

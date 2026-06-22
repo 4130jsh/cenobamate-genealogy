@@ -300,8 +300,8 @@ def _san(text: str, maxlen: int = 34) -> str:
     return (t[:maxlen] + "…") if len(t) > maxlen else t
 
 
-def _label_full(node: str, desc: str = "", plant: str = "") -> str:
-    """자재코드 + (설명) + [배치] + (Plant) 라벨."""
+def _label_full(node: str, desc: str = "", location: str = "") -> str:
+    """자재코드 + (설명) + [배치] + (저장위치) 라벨."""
     mat, _, batch = str(node).partition("||")
     parts = [mat]
     d = _san(desc)
@@ -309,9 +309,9 @@ def _label_full(node: str, desc: str = "", plant: str = "") -> str:
         parts.append(d)
     if batch:
         parts.append(f"[{batch}]")
-    p = _san(plant, 40)
-    if p:
-        parts.append(f"공장: {p}")
+    loc = _san(location, 40)
+    if loc:
+        parts.append(f"위치: {loc}")
     return "\\n".join(parts)
 
 
@@ -325,6 +325,9 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
     """
     node_lookup = dict(zip(nodes_df["node"], nodes_df.get("tier", ""))) if not nodes_df.empty else {}
     node_desc = dict(zip(nodes_df["node"], nodes_df.get("description", ""))) if not nodes_df.empty else {}
+    # 저장위치(storage location) 표시 — location 컬럼 우선, 없으면 공장코드→공장명 fallback
+    has_loc = (not nodes_df.empty) and ("location" in nodes_df.columns)
+    node_loc = dict(zip(nodes_df["node"], nodes_df["location"])) if has_loc else {}
     node_plant = dict(zip(nodes_df["node"], nodes_df.get("plant", ""))) if not nodes_df.empty else {}
     mat_desc: Dict[str, str] = {}
     if not nodes_df.empty and "material" in nodes_df.columns:
@@ -349,9 +352,11 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
     lines = [
         "digraph genealogy {",
         "  rankdir=LR;",                      # RSM(좌) → FP(우): 자재 흐름 방향
-        "  ranksep=1.4;",                     # tier 간 간격 ↑ → 엣지 길어져 날짜 라벨 겹침 완화
-        "  nodesep=0.45;",                    # 같은 tier 노드 간격 ↑ → fan-in 엣지/라벨 분산
+        "  ranksep=2.0;",                     # tier 간 간격 ↑ → 엣지 길어져 날짜 라벨 겹침 완화
+        "  nodesep=0.7;",                     # 같은 tier 노드 간격 ↑ → fan-in 엣지/라벨 분산
+        "  esep=\"+12\";",                    # 엣지/라벨 최소 간격 ↑ → 라벨 겹침 완화
         "  forcelabels=true;",
+        "  overlap=false;",
         "  node [shape=box, style=\"rounded,filled\", fontsize=10, fontname=\"Arial\"];",
         "  edge [fontsize=8, fontname=\"Arial\"];",
     ]
@@ -360,8 +365,8 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
         t = tier_of(n)
         fill = TIER_COLOR.get(t, "#bdbdbd")
         pen = ' penwidth=3 color="#000000"' if n == start_node else ""
-        plabel = _map_plant(node_plant.get(n, ""), plant_map)
-        lines.append(f'  {nid[n]} [label="{_label_full(n, node_desc.get(n, ""), plabel)}", fillcolor="{fill}", fontcolor="white"{pen}];')
+        loclabel = node_loc.get(n, "") if has_loc else _map_plant(node_plant.get(n, ""), plant_map)
+        lines.append(f'  {nid[n]} [label="{_label_full(n, node_desc.get(n, ""), loclabel)}", fillcolor="{fill}", fontcolor="white"{pen}];')
         by_tier.setdefault(t, []).append(nid[n])
 
     # BOM_EXPECTED: 실측 없는 기대 상류를 점선 노드+점선 엣지로
@@ -409,14 +414,17 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
             dlabel = ds[0] if len(ds) == 1 else f"{ds[0]}~{ds[-1]}"
         cnt = f" ×{info['n']}" if info["n"] > 1 else ""
         if info["same_mat"]:
+            # 같은 자재 공장이전: 같은 tier(=같은 rank) 간 수평 엣지 → constraint=false 로
+            # 레이아웃 왜곡/라벨 겹침 방지. 라벨은 줄바꿈으로 엣지선에서 띄움.
             lbl = "이전" + cnt + (f"\\n{dlabel}" if dlabel else "")
-            lines.append(f'  {a} -> {b} [color="{TRANSFER_COLOR}", style=dashed, '
+            lines.append(f'  {a} -> {b} [color="{TRANSFER_COLOR}", style=dashed, constraint=false, '
                          f'label="{lbl}", fontcolor="{TRANSFER_COLOR}", fontsize=8];')
         else:
             color = EDGE_COLOR.get(info["kind"], "#666666")
             style = "dashed" if info["dv"] else "solid"
             txt = (dlabel + cnt).strip()
-            lbl = f', label="{txt}", fontcolor="#555555", fontsize=8' if txt else ""
+            # 날짜 라벨을 엣지선 위로 살짝 띄워(앞에 개행) 인접 라벨/엣지와 겹침 완화
+            lbl = f', label="\\n{txt}", fontcolor="#555555", fontsize=8' if txt else ""
             lines.append(f'  {a} -> {b} [color="{color}", style={style}{lbl}];')
     lines.append("}")
     return "\n".join(lines)

@@ -1025,10 +1025,16 @@ class GenealogyTool:
         if self.cancelled_nodes:   # 완전 취소(reversal)된 유령 생산 배치 제외
             base = base[~base["node"].isin(self.cancelled_nodes)]
         if base.empty:
-            return pd.DataFrame(columns=["node", "material", "batch", "tier", "description", "cmo", "plant", "sloc"])
+            return pd.DataFrame(columns=["node", "material", "batch", "tier", "description", "cmo",
+                                         "plant", "sloc", "location"])
+        # 저장위치 표시 라벨: sloc_desc(공장별 의미: 예 'DP-Patheon')가 있으면 그걸, 없으면 sloc 코드.
+        sd = base["sloc_desc"] if "sloc_desc" in base.columns else pd.Series("", index=base.index)
+        base["location"] = [str(d).strip() or str(s).strip()
+                            for d, s in zip(sd.fillna(""), base["sloc"].fillna(""))]
         agg = (base.groupby(["node", "material", "batch", "tier"], dropna=False)
                .agg(description=("material_desc", first_nonblank),
                     cmo=("cmo", join_unique), plant=("plant", join_unique), sloc=("sloc", join_unique),
+                    location=("location", join_unique),
                     first_posting_date=("posting_date", lambda x: first_nonblank(sorted([v for v in x if v]))),
                     last_posting_date=("posting_date", lambda x: last_nonblank(sorted([v for v in x if v]))),
                     row_count=("row_id", "count")).reset_index())
