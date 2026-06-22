@@ -226,6 +226,57 @@ def flow_search(edges_df: pd.DataFrame, nodes_df: pd.DataFrame,
     return df
 
 
+def node_date_bounds(nodes_df: pd.DataFrame, date_col: str = "first_posting_date"):
+    """노드 제조/입고일(date_col)의 (최소, 최대) date. 없으면 (None, None)."""
+    if nodes_df.empty or date_col not in nodes_df.columns:
+        return None, None
+    s = pd.to_datetime(nodes_df[date_col], errors="coerce").dropna()
+    if s.empty:
+        return None, None
+    return s.min().date(), s.max().date()
+
+
+def nodes_in_period(nodes_df: pd.DataFrame, date_from=None, date_to=None,
+                    tiers: Optional[List[str]] = None, query: str = "",
+                    date_col: str = "first_posting_date") -> pd.DataFrame:
+    """특정 기간에 제조/입고된 배치(노드) 선택. tier·텍스트 필터 가능.
+
+    date_col(기본 first_posting_date = 해당 배치의 최초 전기일 ≈ 제조/입고 시점)이
+    [date_from, date_to] 에 드는 노드만. 결과는 추적 시작점(앵커) 목록으로 쓴다.
+    """
+    if nodes_df.empty:
+        return nodes_df
+    sub = nodes_df
+    if tiers:
+        sub = sub[sub["tier"].isin(tiers)]
+    if (date_from or date_to) and date_col in sub.columns:
+        d = pd.to_datetime(sub[date_col], errors="coerce").dt.date
+        keep = d.notna()
+        if date_from:
+            keep &= d >= date_from
+        if date_to:
+            keep &= d <= date_to
+        sub = sub[keep]
+    q = (query or "").strip().upper()
+    if q:
+        mat = sub["material"].fillna("").str.upper()
+        bat = sub["batch"].fillna("").str.upper()
+        sub = sub[mat.str.contains(q, regex=False) | bat.str.contains(q, regex=False)]
+    cols = [c for c in ["tier", "material", "batch"] if c in sub.columns]
+    return sub.sort_values(cols) if cols else sub
+
+
+def upstream_edges_of_nodes(edges_df: pd.DataFrame, seed_nodes, max_depth: int = 40) -> pd.DataFrame:
+    """주어진 노드들의 상류(RSM 방향) 흐름 엣지 합집합(중복 제거)."""
+    if edges_df.empty or not seed_nodes:
+        return edges_df.iloc[0:0].copy()
+    collected: Set = set()
+    for s in seed_nodes:
+        sub, _, _ = trace_subgraph(edges_df, s, "upstream", max_depth=max_depth)
+        collected |= set(sub.index)
+    return edges_df.loc[sorted(collected)].copy()
+
+
 def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_expected: pd.DataFrame,
                      nodes_df: pd.DataFrame, legacy_map: Optional[Dict[str, str]] = None) -> List[dict]:
     """서브그래프 각 노드에서 BOM 상 기대되지만 실측 상류 엣지가 없는 입력 목록.
@@ -558,11 +609,9 @@ def expand_flow_upstream(edges_df: pd.DataFrame, seed_edges: pd.DataFrame,
     """
     if seed_edges.empty or edges_df.empty:
         return seed_edges
-    collected: Set = set(seed_edges.index)
     seeds = set(seed_edges["from_node"]) | set(seed_edges["to_node"])
-    for s in seeds:
-        sub, _, _ = trace_subgraph(edges_df, s, "upstream", max_depth=max_depth)
-        collected |= set(sub.index)
+    up = upstream_edges_of_nodes(edges_df, seeds, max_depth=max_depth)
+    collected = set(seed_edges.index) | set(up.index)
     return edges_df.loc[sorted(collected)].copy()
 
 

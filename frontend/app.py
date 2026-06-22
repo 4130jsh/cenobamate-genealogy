@@ -89,7 +89,7 @@ def main() -> None:
         st.stop()
 
     tabs = st.tabs(["⬆️ 상류 (FP→RSM)", "⬇️ 하류 (RSM→FP)", "🔎 흐름 검색",
-                    "📋 노드/엣지", "🗂 빌드·적재 이력"])
+                    "📅 기간 제조배치", "📋 노드/엣지", "🗂 빌드·적재 이력"])
 
     # ── Tab 1: 상류 그래프 + BOM_EXPECTED ─────────────────────
     with tabs[0]:
@@ -127,8 +127,12 @@ def main() -> None:
     with tabs[2]:
         _render_flow_search(edges, nodes)
 
-    # ── Tab 4: 노드/엣지 테이블 ──────────────────────────────
+    # ── Tab 4: 기간 제조배치 → 상류 전체 ─────────────────────
     with tabs[3]:
+        _render_period_production(edges, nodes, bom_expected, legacy, plant_map)
+
+    # ── Tab 5: 노드/엣지 테이블 ──────────────────────────────
+    with tabs[4]:
         st.subheader("노드")
         c1, c2 = st.columns([2, 2])
         nq = c1.text_input("노드 검색(material/batch)")
@@ -139,8 +143,8 @@ def main() -> None:
         ev = edges if not kind_filter else edges[edges["edge_kind"].isin(kind_filter)]
         st.dataframe(ev, use_container_width=True, hide_index=True)
 
-    # ── Tab 5: 이력 ─────────────────────────────────────────
-    with tabs[4]:
+    # ── Tab 6: 이력 ─────────────────────────────────────────
+    with tabs[5]:
         st.subheader("빌드 이력 (build_runs)")
         st.dataframe(runs, use_container_width=True, hide_index=True)
         st.subheader("적재 이력 (ingest_log)")
@@ -248,6 +252,71 @@ def _render_flow_search(edges, nodes) -> None:
     st.download_button("⬇️ 검색결과 CSV", res.to_csv(index=False).encode("utf-8-sig"),
                        file_name="flow_search.csv", mime="text/csv",
                        key="fs_dl", use_container_width=True)
+
+
+def _render_period_production(edges, nodes, bom_expected, legacy, plant_map) -> None:
+    """특정 기간에 제조/입고된 배치를 찾아 각 배치의 전체 상류 흐름을 보는 탭."""
+    st.caption("특정 기간에 제조/입고된 배치를 찾아, 각 배치의 전체 상류 흐름(RSM→해당 배치)을 본다. "
+               "기준 시점 = 배치의 최초 전기일(제조/입고).")
+    pmin, pmax = gdb.node_date_bounds(nodes)
+    if not pmin:
+        st.info("노드에 제조/입고일(first_posting_date) 정보가 없습니다. "
+                "결과 DB를 최신 엔진으로 재빌드하세요.")
+        return
+    c1, c2 = st.columns([2, 2])
+    tiers = c1.multiselect("제조 배치 tier", ["FP", "SP", "DP", "API", "RSM", "OTHER"],
+                           default=["FP"], key="pp_tier")
+    query = c2.text_input("자재/배치 텍스트(선택)", key="pp_q")
+    if pmin < pmax:
+        date_from, date_to = st.slider("제조/입고 기간", pmin, pmax, (pmin, pmax), key="pp_date")
+    else:
+        date_from, date_to = pmin, pmax
+        st.caption(f"제조/입고일: {pmin}")
+
+    anchors = gdb.nodes_in_period(nodes, date_from, date_to, tiers, query=query)
+    st.caption(f"기간 내 제조/입고 배치: {len(anchors):,}개")
+    if anchors.empty:
+        st.info("조건에 맞는 제조/입고 배치가 없습니다.")
+        return
+    show_cols = [c for c in ["tier", "material", "description", "batch",
+                             "first_posting_date", "location", "cmo"] if c in anchors.columns]
+    st.dataframe(anchors[show_cols], use_container_width=True, hide_index=True)
+
+    mode = st.radio("상류 보기 방식", ["배치 1건 선택", "전체 합쳐 보기"],
+                    horizontal=True, key="pp_mode")
+    if mode == "배치 1건 선택":
+        dcol = anchors["first_posting_date"] if "first_posting_date" in anchors.columns else anchors["batch"]
+        labels = {n: f"[{t}] {m} / {b}  ({str(d)[:10]})" for n, t, m, b, d in
+                  zip(anchors["node"], anchors["tier"], anchors["material"], anchors["batch"], dcol)}
+        sel = st.selectbox(f"배치 선택 ({len(anchors):,}개) → 상류 전체", anchors["node"].tolist(),
+                           format_func=lambda n: labels.get(n, n), key="pp_sel")
+        if sel:
+            sub, visited, _ = gdb.trace_subgraph(edges, sel, "upstream", max_depth=40)
+            st.markdown(_legend_md(), unsafe_allow_html=True)
+            exp = gdb.expected_missing(visited, edges, bom_expected, nodes, legacy)
+            _render_trace(nodes, sub, visited, sel, "upstream", exp, "pp", plant_map)
+    else:
+        seeds = anchors["node"].tolist()
+        res = gdb.upstream_edges_of_nodes(edges, seeds, max_depth=40)
+        st.markdown(_legend_md(), unsafe_allow_html=True)
+        st.caption(f"합산 상류 엣지: {len(res):,}개 (앵커 배치 {len(seeds):,}개)")
+        if res.empty:
+            st.info("이 배치들의 실측 상류 엣지가 없습니다(단일 export 범위 한계일 수 있음).")
+            return
+        GRAPH_CAP = 250
+        if len(res) <= GRAPH_CAP:
+            dot = gdb.build_dot(res, nodes, "", "upstream", show_dates=True)
+            _graph_with_downloads(dot, "기간 제조배치 상류(합본)", "ppall")
+        else:
+            st.warning(f"엣지가 많아({len(res):,} > {GRAPH_CAP}) 그래프는 생략했습니다. "
+                       "'배치 1건 선택'으로 보거나 기간/tier 를 좁히세요.")
+        st.subheader("🕒 타임라인 (전기일 순)")
+        st.dataframe(gdb.timeline_table(res), use_container_width=True, hide_index=True)
+        with st.expander(f"엣지 테이블(상세) — {len(res):,}건"):
+            _edge_table(res)
+        st.download_button("⬇️ 상류 합본 CSV", res.to_csv(index=False).encode("utf-8-sig"),
+                           file_name="period_upstream.csv", mime="text/csv",
+                           key="pp_dl", use_container_width=True)
 
 
 def _graph_with_downloads(dot: str, title: str, key: str) -> None:

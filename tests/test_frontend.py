@@ -345,6 +345,30 @@ def test_edge_kind_legend():
     assert all(d.strip() for _, d in leg), "설명이 비어 있는 항목이 있음"
 
 
+def test_nodes_in_period_and_upstream():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    lo, hi = gdb.node_date_bounds(nodes)
+    assert lo is not None and hi is not None, "노드 제조/입고일 경계 산출 실패"
+
+    # FP 배치만, 전 기간 → FP 노드만 선택됨
+    fp = gdb.nodes_in_period(nodes, lo, hi, tiers=["FP"])
+    assert not fp.empty and fp["tier"].eq("FP").all()
+
+    # 좁은 기간(케이스1 PROD: API-B1 제조일 2026-01-05) → API-B1 포함, 그 상류에 RSM→API 존재
+    import datetime as dt
+    d = dt.date(2026, 1, 5)
+    api = gdb.nodes_in_period(nodes, d, d, tiers=["API"])
+    assert (api["batch"] == "API-B1").any(), f"기간 내 제조 API 배치 누락: {api['batch'].tolist()}"
+
+    # 앵커 배치(FP-B1)의 상류 합산 → RSM→API(PROD) 포함
+    seeds = nodes[nodes["batch"] == "FP-B1"]["node"].tolist()
+    up = gdb.upstream_edges_of_nodes(edges, seeds)
+    assert not up.empty
+    assert ((up["from_tier"] == "RSM") & (up["to_tier"] == "API")).any(), \
+        "FP-B1 상류 합산에 RSM→API 가 없음"
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
