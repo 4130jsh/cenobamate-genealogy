@@ -239,6 +239,20 @@ def test_timeline_and_date_features():
     assert len(f) == len(sub)  # 전체 범위면 전부 유지
 
 
+def test_parallel_edges_collapsed():
+    import pandas as pd
+    # 같은 노드쌍 사이 평행 엣지 3개 → 그래프엔 1개로 합쳐지고 ×N·날짜범위 표시
+    sub = pd.DataFrame([
+        {"from_node": "3CNY2Z001ZZZ||A", "to_node": "3CNY2Z001ZZZ||B",
+         "from_material": "3CNY2Z001ZZZ", "to_material": "3CNY2Z001ZZZ",
+         "from_tier": "DP", "to_tier": "DP", "edge_kind": "DOC_TRANSFER", "posting_date": d}
+        for d in ("2020-06-22", "2020-08-01", "2020-06-22")
+    ])
+    dot = gdb.build_dot(sub, pd.DataFrame(), "3CNY2Z001ZZZ||B", "upstream", show_dates=True)
+    assert dot.count("->") == 1, "평행 엣지가 1개로 합쳐지지 않음"
+    assert "×3" in dot and "2020-06-22~2020-08-01" in dot, "합친 엣지에 건수·날짜범위 표시 누락"
+
+
 def test_dot_to_html_full_graph():
     dot = "digraph { a -> b; }"
     html = gdb.dot_to_html(dot, "테스트")

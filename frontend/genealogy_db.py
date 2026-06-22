@@ -380,22 +380,43 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
     for t in sorted(by_tier, key=lambda x: TIER_ORDER.get(x, 9)):
         ids = " ".join(f"{i};" for i in by_tier[t])
         lines.append(f"  {{ rank=same; {ids} }}")
+    # 같은 노드쌍(from→to) 사이 평행 엣지는 1개로 합침(중복 이동 표시 제거).
+    #   상세 표·타임라인엔 전부 남고, 그래프만 노드쌍당 1엣지로 정리.
+    agg: Dict[Tuple[str, str], dict] = {}
+    order: List[Tuple[str, str]] = []
     for _, r in sub_edges.iterrows():
         a, b = nid.get(r["from_node"]), nid.get(r["to_node"])
         if not a or not b:
             continue
-        fm = str(r.get("from_material", "")).strip()
-        tm = str(r.get("to_material", "")).strip()
-        d = _edge_date(r.get("posting_date")) if show_dates else ""
-        if fm and fm == tm:
-            # 같은 자재 다른 배치 = 공장이전/재배치(CMO 핸드오프) — 제조 전환과 구분
-            lbl = "이전" + (f"\\n{d}" if d else "")
+        key = (a, b)
+        if key not in agg:
+            agg[key] = {"same_mat": str(r.get("from_material", "")).strip() == str(r.get("to_material", "")).strip()
+                        and bool(str(r.get("from_material", "")).strip()),
+                        "kind": r.get("edge_kind", ""), "dates": set(), "dv": False, "n": 0}
+            order.append(key)
+        info = agg[key]
+        info["n"] += 1
+        info["dv"] = info["dv"] or r.get("date_violation") in (1, True, "1", "True")
+        dd = _edge_date(r.get("posting_date"))
+        if dd:
+            info["dates"].add(dd)
+
+    for (a, b) in order:
+        info = agg[(a, b)]
+        dlabel = ""
+        if show_dates and info["dates"]:
+            ds = sorted(info["dates"])
+            dlabel = ds[0] if len(ds) == 1 else f"{ds[0]}~{ds[-1]}"
+        cnt = f" ×{info['n']}" if info["n"] > 1 else ""
+        if info["same_mat"]:
+            lbl = "이전" + cnt + (f"\\n{dlabel}" if dlabel else "")
             lines.append(f'  {a} -> {b} [color="{TRANSFER_COLOR}", style=dashed, '
                          f'label="{lbl}", fontcolor="{TRANSFER_COLOR}", fontsize=8];')
         else:
-            color = EDGE_COLOR.get(r.get("edge_kind", ""), "#666666")
-            style = "dashed" if r.get("date_violation") in (1, True, "1", "True") else "solid"
-            lbl = f', label="{d}", fontcolor="#555555", fontsize=8' if d else ""
+            color = EDGE_COLOR.get(info["kind"], "#666666")
+            style = "dashed" if info["dv"] else "solid"
+            txt = (dlabel + cnt).strip()
+            lbl = f', label="{txt}", fontcolor="#555555", fontsize=8' if txt else ""
             lines.append(f'  {a} -> {b} [color="{color}", style={style}{lbl}];')
     lines.append("}")
     return "\n".join(lines)
