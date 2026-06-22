@@ -89,7 +89,7 @@ def main() -> None:
         st.stop()
 
     tabs = st.tabs(["⬆️ 상류 (FP→RSM)", "⬇️ 하류 (RSM→FP)", "🔎 흐름 검색",
-                    "📅 기간 제조배치", "📋 노드/엣지", "🗂 빌드·적재 이력"])
+                    "📅 기간 추적", "📋 노드/엣지", "🗂 빌드·적재 이력"])
 
     # ── Tab 1: 상류 그래프 + BOM_EXPECTED ─────────────────────
     with tabs[0]:
@@ -127,9 +127,9 @@ def main() -> None:
     with tabs[2]:
         _render_flow_search(edges, nodes)
 
-    # ── Tab 4: 기간 제조배치 → 상류 전체 ─────────────────────
+    # ── Tab 4: 기간 추적 (제조→상류 / 소비→하류) ─────────────
     with tabs[3]:
-        _render_period_production(edges, nodes, bom_expected, legacy, plant_map)
+        _render_period_trace(edges, nodes, bom_expected, legacy, plant_map)
 
     # ── Tab 5: 노드/엣지 테이블 ──────────────────────────────
     with tabs[4]:
@@ -254,78 +254,107 @@ def _render_flow_search(edges, nodes) -> None:
                        key="fs_dl", use_container_width=True)
 
 
-def _render_period_production(edges, nodes, bom_expected, legacy, plant_map) -> None:
-    """특정 기간에 제조/입고된 배치를 찾아 각 배치의 전체 상류 흐름을 보는 탭."""
-    st.caption("특정 기간에 제조/입고된 배치를 찾아, 각 배치의 전체 상류 흐름(RSM→해당 배치)을 본다.")
-    basis = st.radio("제조일 기준", ["생산(101) 엣지 날짜 — 엄밀", "최초 전기일 — 입고 포함"],
-                     horizontal=True, key="pp_basis",
-                     help="엄밀: 실제 생산(101)된 배치만, 그 생산 전기일 기준. "
-                          "입고 포함: 구매 입고 등 최초 전기일 기준(생산 엣지 없는 배치도 포함).")
-    strict = basis.startswith("생산")
-    prod_map = gdb.production_dates(edges) if strict else None
+def _show_reached_fp(sub, nodes) -> None:
+    """하류 흐름에서 도달한 FP(완제품) 배치 요약."""
+    fp = gdb.reached_nodes(sub, nodes, tier="FP", side="to")
+    if fp.empty:
+        st.caption("이 흐름에서 도달한 FP(완제품) 배치가 없습니다(범위 내 완제품 미연결).")
+    else:
+        st.markdown(f"**🎯 도달한 FP(완제품) 배치: {len(fp):,}개**")
+        st.dataframe(fp, use_container_width=True, hide_index=True)
+
+
+def _render_period_trace(edges, nodes, bom_expected, legacy, plant_map) -> None:
+    """특정 기간에 제조(→상류)/소비(→하류)된 배치를 찾아 전체 흐름을 보는 탭."""
+    dlabel = st.radio("추적 방향",
+                      ["상류 (이 배치가 어디서 왔나: RSM 방향)", "하류 (이 배치가 어디로 갔나: FP 방향)"],
+                      horizontal=True, key="pp_dir")
+    upstream = dlabel.startswith("상류")
+    direction = "upstream" if upstream else "downstream"
+    flow_word = "상류" if upstream else "하류"
+
+    if upstream:
+        st.caption("특정 기간에 제조/입고된 배치를 찾아, 각 배치의 전체 상류 흐름(RSM→해당 배치)을 본다.")
+        basis = st.radio("제조일 기준", ["생산(101) 엣지 날짜 — 엄밀", "최초 전기일 — 입고 포함"],
+                         horizontal=True, key="pp_basis",
+                         help="엄밀: 실제 생산(101)된 배치만, 그 생산 전기일 기준. "
+                              "입고 포함: 최초 전기일 기준(생산 엣지 없는 배치도 포함).")
+        strict = basis.startswith("생산")
+        date_map = gdb.production_dates(edges) if strict else None
+        default_tiers, date_name, period_label = ["FP"], "생산일", "제조/입고 기간"
+    else:
+        st.caption("특정 기간에 소비/투입된 배치(RSM·API 등)를 찾아, 각 배치가 어느 완제품(FP)으로 흘렀는지 본다.")
+        basis = st.radio("소비일 기준", ["소비 엣지 날짜 — 엄밀", "최초 전기일"],
+                         horizontal=True, key="pp_basis",
+                         help="엄밀: 그 배치가 입력으로 쓰인(out-edge) 가장 이른 전기일(실제 투입분만). "
+                              "최초 전기일: 노드 최초 전기일 기준.")
+        strict = basis.startswith("소비")
+        date_map = gdb.consumption_dates(edges) if strict else None
+        default_tiers, date_name, period_label = ["RSM", "API"], "소비일", "소비/투입 기간"
+
     if strict:
-        pmin, pmax = gdb.date_map_bounds(prod_map)
+        pmin, pmax = gdb.date_map_bounds(date_map)
         if not pmin:
-            st.info("생산(101) 엣지가 없어 엄밀 모드로 잡히는 배치가 없습니다. "
-                    "'최초 전기일' 기준을 쓰거나 결과 DB를 재빌드하세요.")
+            st.info("엄밀 모드로 잡히는 배치가 없습니다. '최초 전기일' 기준을 쓰거나 결과 DB를 재빌드하세요.")
             return
     else:
         pmin, pmax = gdb.node_date_bounds(nodes)
         if not pmin:
-            st.info("노드에 제조/입고일(first_posting_date) 정보가 없습니다. "
-                    "결과 DB를 최신 엔진으로 재빌드하세요.")
+            st.info("노드에 전기일 정보가 없습니다. 결과 DB를 최신 엔진으로 재빌드하세요.")
             return
+
     c1, c2 = st.columns([2, 2])
-    tiers = c1.multiselect("제조 배치 tier", ["FP", "SP", "DP", "API", "RSM", "OTHER"],
-                           default=["FP"], key="pp_tier")
+    tiers = c1.multiselect("배치 tier", ["FP", "SP", "DP", "API", "RSM", "OTHER"],
+                           default=default_tiers, key="pp_tier")
     query = c2.text_input("자재/배치 텍스트(선택)", key="pp_q")
     if pmin < pmax:
-        date_from, date_to = st.slider("제조/입고 기간", pmin, pmax, (pmin, pmax), key="pp_date")
+        date_from, date_to = st.slider(period_label, pmin, pmax, (pmin, pmax), key="pp_date")
     else:
         date_from, date_to = pmin, pmax
-        st.caption(f"제조/입고일: {pmin}")
+        st.caption(f"{period_label}: {pmin}")
 
-    anchors = gdb.nodes_in_period(nodes, date_from, date_to, tiers, query=query, date_map=prod_map)
-    # 생산일(또는 최초 전기일)을 표·라벨에 표시
-    anchors = anchors.copy()
+    anchors = gdb.nodes_in_period(nodes, date_from, date_to, tiers, query=query, date_map=date_map).copy()
     if strict:
-        anchors["생산일"] = anchors["node"].map(prod_map)
-        date_field = "생산일"
+        anchors[date_name] = anchors["node"].map(date_map)
+        date_field = date_name
     else:
         date_field = "first_posting_date"
-    st.caption(f"기간 내 제조/입고 배치: {len(anchors):,}개")
+    st.caption(f"기간 내 대상 배치: {len(anchors):,}개")
     if anchors.empty:
-        st.info("조건에 맞는 제조/입고 배치가 없습니다.")
+        st.info("조건에 맞는 배치가 없습니다.")
         return
     show_cols = [c for c in ["tier", "material", "description", "batch",
                              date_field, "location", "cmo"] if c in anchors.columns]
     st.dataframe(anchors[show_cols], use_container_width=True, hide_index=True)
 
-    mode = st.radio("상류 보기 방식", ["배치 1건 선택", "전체 합쳐 보기"],
-                    horizontal=True, key="pp_mode")
+    mode = st.radio("보기 방식", ["배치 1건 선택", "전체 합쳐 보기"], horizontal=True, key="pp_mode")
     if mode == "배치 1건 선택":
         dcol = anchors[date_field] if date_field in anchors.columns else anchors["batch"]
         labels = {n: f"[{t}] {m} / {b}  ({str(d)[:10]})" for n, t, m, b, d in
                   zip(anchors["node"], anchors["tier"], anchors["material"], anchors["batch"], dcol)}
-        sel = st.selectbox(f"배치 선택 ({len(anchors):,}개) → 상류 전체", anchors["node"].tolist(),
+        sel = st.selectbox(f"배치 선택 ({len(anchors):,}개) → {flow_word} 전체", anchors["node"].tolist(),
                            format_func=lambda n: labels.get(n, n), key="pp_sel")
         if sel:
-            sub, visited, _ = gdb.trace_subgraph(edges, sel, "upstream", max_depth=40)
+            sub, visited, _ = gdb.trace_subgraph(edges, sel, direction, max_depth=40)
             st.markdown(_legend_md(), unsafe_allow_html=True)
-            exp = gdb.expected_missing(visited, edges, bom_expected, nodes, legacy)
-            _render_trace(nodes, sub, visited, sel, "upstream", exp, "pp", plant_map)
+            if not upstream:
+                _show_reached_fp(sub, nodes)
+            exp = gdb.expected_missing(visited, edges, bom_expected, nodes, legacy) if upstream else None
+            _render_trace(nodes, sub, visited, sel, direction, exp, "pp", plant_map)
     else:
         seeds = anchors["node"].tolist()
-        res = gdb.upstream_edges_of_nodes(edges, seeds, max_depth=40)
+        res = gdb.flow_edges_of_nodes(edges, seeds, direction, max_depth=40)
         st.markdown(_legend_md(), unsafe_allow_html=True)
-        st.caption(f"합산 상류 엣지: {len(res):,}개 (앵커 배치 {len(seeds):,}개)")
+        st.caption(f"합산 {flow_word} 엣지: {len(res):,}개 (앵커 배치 {len(seeds):,}개)")
         if res.empty:
-            st.info("이 배치들의 실측 상류 엣지가 없습니다(단일 export 범위 한계일 수 있음).")
+            st.info(f"이 배치들의 실측 {flow_word} 엣지가 없습니다(단일 export 범위 한계일 수 있음).")
             return
+        if not upstream:
+            _show_reached_fp(res, nodes)
         GRAPH_CAP = 250
         if len(res) <= GRAPH_CAP:
-            dot = gdb.build_dot(res, nodes, "", "upstream", show_dates=True)
-            _graph_with_downloads(dot, "기간 제조배치 상류(합본)", "ppall")
+            dot = gdb.build_dot(res, nodes, "", direction, show_dates=True)
+            _graph_with_downloads(dot, f"기간 {flow_word}(합본)", "ppall")
         else:
             st.warning(f"엣지가 많아({len(res):,} > {GRAPH_CAP}) 그래프는 생략했습니다. "
                        "'배치 1건 선택'으로 보거나 기간/tier 를 좁히세요.")
@@ -333,8 +362,8 @@ def _render_period_production(edges, nodes, bom_expected, legacy, plant_map) -> 
         st.dataframe(gdb.timeline_table(res), use_container_width=True, hide_index=True)
         with st.expander(f"엣지 테이블(상세) — {len(res):,}건"):
             _edge_table(res)
-        st.download_button("⬇️ 상류 합본 CSV", res.to_csv(index=False).encode("utf-8-sig"),
-                           file_name="period_upstream.csv", mime="text/csv",
+        st.download_button(f"⬇️ {flow_word} 합본 CSV", res.to_csv(index=False).encode("utf-8-sig"),
+                           file_name=f"period_{direction}.csv", mime="text/csv",
                            key="pp_dl", use_container_width=True)
 
 

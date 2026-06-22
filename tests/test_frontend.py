@@ -390,6 +390,28 @@ def test_production_date_strict_anchor():
     assert bounds[0] is not None and bounds[0] <= bounds[1]
 
 
+def test_consumption_anchor_downstream():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    cons = gdb.consumption_dates(edges)   # node→소비(out-edge) 최초 전기일
+    assert cons, "소비일 맵이 비어 있음"
+    # RSM-B1 은 케이스1에서 2026-01-05 에 소비(543)되어 API-B1 생산에 투입
+    rsm_node = nodes[nodes["batch"] == "RSM-B1"]["node"].iloc[0]
+    assert cons.get(rsm_node) == "2026-01-05", f"RSM-B1 소비일 오류: {cons.get(rsm_node)}"
+
+    import datetime as dt
+    d = dt.date(2026, 1, 5)
+    anchor = gdb.nodes_in_period(nodes, d, d, tiers=["RSM"], date_map=cons)
+    assert (anchor["batch"] == "RSM-B1").any(), "소비일 기준 RSM-B1 앵커 누락"
+
+    # RSM-B1 하류 합산 → FP-B1(완제품) 도달
+    seeds = [rsm_node]
+    down = gdb.flow_edges_of_nodes(edges, seeds, "downstream")
+    assert not down.empty
+    fp = gdb.reached_nodes(down, nodes, tier="FP", side="to")
+    assert (fp["batch"] == "FP-B1").any(), f"RSM-B1 하류에서 FP-B1 도달 실패: {fp.get('batch')}"
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

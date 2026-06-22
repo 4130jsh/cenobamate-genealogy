@@ -308,15 +308,54 @@ def nodes_in_period(nodes_df: pd.DataFrame, date_from=None, date_to=None,
     return sub.sort_values(cols) if cols else sub
 
 
-def upstream_edges_of_nodes(edges_df: pd.DataFrame, seed_nodes, max_depth: int = 40) -> pd.DataFrame:
-    """주어진 노드들의 상류(RSM 방향) 흐름 엣지 합집합(중복 제거)."""
+def flow_edges_of_nodes(edges_df: pd.DataFrame, seed_nodes, direction: str = "upstream",
+                        max_depth: int = 40) -> pd.DataFrame:
+    """주어진 노드들의 상류/하류 흐름 엣지 합집합(중복 제거)."""
     if edges_df.empty or not seed_nodes:
         return edges_df.iloc[0:0].copy()
     collected: Set = set()
     for s in seed_nodes:
-        sub, _, _ = trace_subgraph(edges_df, s, "upstream", max_depth=max_depth)
+        sub, _, _ = trace_subgraph(edges_df, s, direction, max_depth=max_depth)
         collected |= set(sub.index)
     return edges_df.loc[sorted(collected)].copy()
+
+
+def upstream_edges_of_nodes(edges_df: pd.DataFrame, seed_nodes, max_depth: int = 40) -> pd.DataFrame:
+    """주어진 노드들의 상류(RSM 방향) 흐름 엣지 합집합(중복 제거)."""
+    return flow_edges_of_nodes(edges_df, seed_nodes, "upstream", max_depth)
+
+
+def consumption_dates(edges_df: pd.DataFrame) -> Dict[str, str]:
+    """node → 소비 전기일(YYYY-MM-DD) 맵. 그 배치가 입력으로 쓰인(out-edge) 가장 이른 전기일.
+
+    하류 추적 앵커용: '이 기간에 소비/투입된 배치'를 잡는다. out-edge 가 없는
+    배치(최종 FP 등 어디에도 투입 안 됨)는 맵에 들어가지 않는다.
+    """
+    if edges_df.empty:
+        return {}
+    col = "from_posting_date" if "from_posting_date" in edges_df.columns else "posting_date"
+    out: Dict[str, str] = {}
+    for n, d in zip(edges_df["from_node"], edges_df[col]):
+        dd = _edge_date(d)
+        if not dd:
+            continue
+        if n not in out or dd < out[n]:
+            out[n] = dd
+    return out
+
+
+def reached_nodes(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, tier: str = "FP",
+                  side: str = "to") -> pd.DataFrame:
+    """흐름 엣지 집합에서 특정 tier(기본 FP)에 도달한 노드 요약(하류 결과용)."""
+    if sub_edges.empty:
+        return pd.DataFrame()
+    col, tcol = (f"{side}_node", f"{side}_tier")
+    hit = sub_edges[sub_edges[tcol] == tier][col].dropna().unique().tolist() if tcol in sub_edges.columns else []
+    if not hit:
+        return pd.DataFrame()
+    nd = nodes_df[nodes_df["node"].isin(hit)] if not nodes_df.empty else pd.DataFrame()
+    cols = [c for c in ["tier", "material", "description", "batch", "location", "cmo"] if c in nd.columns]
+    return nd[cols].sort_values([c for c in ["material", "batch"] if c in cols]) if cols else nd
 
 
 def expected_missing(visited_nodes: Set[str], actual_edges: pd.DataFrame, bom_expected: pd.DataFrame,
