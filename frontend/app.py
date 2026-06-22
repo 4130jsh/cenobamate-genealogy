@@ -103,17 +103,7 @@ def main() -> None:
                 st.info("이 배치의 실측 상류 엣지가 없습니다(단일 export 범위 한계일 수 있음).")
             else:
                 exp = gdb.expected_missing(visited, edges, bom_expected, nodes, legacy) if show_exp else None
-                dot = gdb.build_dot(sub, nodes, sel, "upstream", expected=exp)
-                _graph_with_downloads(dot, f"상류 {sel}", f"up_{sel}")
-                cap = f"상류 노드 {len(visited)}개 · 실측 엣지 {len(sub)}개"
-                if exp:
-                    cap += f" · BOM 기대(끊김) {len(exp)}개"
-                st.caption(cap + "  (실선=실측 제조, 회색점선'이전'=공장이전/재배치, 점선보라=BOM 기대 상류)")
-                if exp:
-                    with st.expander(f"끊긴 상류(BOM_EXPECTED) {len(exp)}개"):
-                        st.dataframe(exp, use_container_width=True, hide_index=True)
-                with st.expander("이 경로의 실측 엣지 테이블"):
-                    _edge_table(sub)
+                _render_trace(nodes, sub, visited, sel, "upstream", exp, "up")
 
     # ── Tab 2: 하류 그래프 ───────────────────────────────────
     with tabs[1]:
@@ -128,12 +118,7 @@ def main() -> None:
             if sub.empty:
                 st.info("이 배치의 실측 하류 엣지가 없습니다.")
             else:
-                dot = gdb.build_dot(sub, nodes, sel, "downstream")
-                _graph_with_downloads(dot, f"하류 {sel}", f"down_{sel}")
-                st.caption(f"하류 노드 {len(visited)}개 · 실측 엣지 {len(sub)}개"
-                           "  (실선=실측 제조, 회색점선'이전'=공장이전/재배치)")
-                with st.expander("이 경로의 실측 엣지 테이블"):
-                    _edge_table(sub)
+                _render_trace(nodes, sub, visited, sel, "downstream", None, "down")
 
     # ── Tab 3: 노드/엣지 테이블 ──────────────────────────────
     with tabs[2]:
@@ -159,10 +144,43 @@ def main() -> None:
 
 
 def _edge_table(sub):
-    cols = [c for c in ["edge_kind", "from_material", "from_desc", "from_batch", "from_tier",
-                        "to_material", "to_desc", "to_batch", "to_tier", "confidence",
-                        "date_violation", "source_rule"] if c in sub.columns]
+    cols = [c for c in ["posting_date", "edge_kind", "from_material", "from_desc", "from_batch", "from_tier",
+                        "from_posting_date", "to_material", "to_desc", "to_batch", "to_tier",
+                        "to_posting_date", "confidence", "date_violation", "source_rule"] if c in sub.columns]
     st.dataframe(sub[cols], use_container_width=True, hide_index=True)
+
+
+def _render_trace(nodes, sub, visited, sel, direction, exp, keyp):
+    """날짜 범위 필터 + 날짜 라벨 + 그래프 + 타임라인 + 엣지 테이블."""
+    c1, c2 = st.columns([1, 2])
+    show_dates = c1.checkbox("엣지에 날짜 표시", value=True, key=f"sd_{keyp}")
+    sub_f = sub
+    dmin, dmax = gdb.edge_date_bounds(sub)
+    if dmin and dmax and dmin < dmax:
+        rng = c2.slider("날짜 범위", dmin, dmax, (dmin, dmax), key=f"dr_{keyp}")
+        sub_f = gdb.filter_edges_by_date(sub, rng[0], rng[1])
+    elif dmin:
+        c2.caption(f"전기일: {dmin}")
+
+    dot = gdb.build_dot(sub_f, nodes, sel, direction, expected=exp, show_dates=show_dates)
+    _graph_with_downloads(dot, f"{'상류' if direction=='upstream' else '하류'} {sel}", f"{keyp}_{sel}")
+
+    cap = f"노드 {len(visited)}개 · 표시 엣지 {len(sub_f)}/{len(sub)}개"
+    if exp:
+        cap += f" · BOM 기대 {len(exp)}개"
+    st.caption(cap + "  (실선=실측 제조, 회색점선'이전'=공장이전/재배치, 점선보라=BOM 기대, 엣지 숫자=전기일)")
+
+    st.subheader("🕒 타임라인 (전기일 순)")
+    tl = gdb.timeline_table(sub_f)
+    if tl.empty:
+        st.caption("표시할 전환/이동이 없습니다.")
+    else:
+        st.dataframe(tl, use_container_width=True, hide_index=True)
+    if exp:
+        with st.expander(f"끊긴 상류(BOM_EXPECTED) {len(exp)}개"):
+            st.dataframe(exp, use_container_width=True, hide_index=True)
+    with st.expander("이 경로의 실측 엣지 테이블(상세)"):
+        _edge_table(sub_f)
 
 
 def _graph_with_downloads(dot: str, title: str, key: str) -> None:

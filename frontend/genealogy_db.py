@@ -293,7 +293,8 @@ def _label_full(node: str, desc: str = "") -> str:
 
 
 def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
-              direction: str = "upstream", expected: Optional[List[dict]] = None) -> str:
+              direction: str = "upstream", expected: Optional[List[dict]] = None,
+              show_dates: bool = False) -> str:
     """tier 를 좌→우 컬럼(RSM…FP)으로 정렬한 Graphviz DOT 문자열.
 
     노드 집합은 서브그래프 엣지(+시작 노드)로 엄격히 한정한다(전체 warehouse 아님).
@@ -357,16 +358,59 @@ def build_dot(sub_edges: pd.DataFrame, nodes_df: pd.DataFrame, start_node: str,
             continue
         fm = str(r.get("from_material", "")).strip()
         tm = str(r.get("to_material", "")).strip()
+        d = _edge_date(r.get("posting_date")) if show_dates else ""
         if fm and fm == tm:
             # 같은 자재 다른 배치 = 공장이전/재배치(CMO 핸드오프) — 제조 전환과 구분
+            lbl = "이전" + (f"\\n{d}" if d else "")
             lines.append(f'  {a} -> {b} [color="{TRANSFER_COLOR}", style=dashed, '
-                         f'label="이전", fontcolor="{TRANSFER_COLOR}", fontsize=8];')
+                         f'label="{lbl}", fontcolor="{TRANSFER_COLOR}", fontsize=8];')
         else:
             color = EDGE_COLOR.get(r.get("edge_kind", ""), "#666666")
             style = "dashed" if r.get("date_violation") in (1, True, "1", "True") else "solid"
-            lines.append(f'  {a} -> {b} [color="{color}", style={style}];')
+            lbl = f', label="{d}", fontcolor="#555555", fontsize=8' if d else ""
+            lines.append(f'  {a} -> {b} [color="{color}", style={style}{lbl}];')
     lines.append("}")
     return "\n".join(lines)
+
+
+def _edge_date(s) -> str:
+    """posting_date 문자열에서 날짜 부분(YYYY-MM-DD)만."""
+    return str(s or "").split(" ")[0][:10]
+
+
+def edge_date_bounds(sub_edges: pd.DataFrame):
+    """서브그래프 엣지의 (최소, 최대) 전기일(date). 없으면 (None, None)."""
+    if sub_edges.empty or "posting_date" not in sub_edges.columns:
+        return None, None
+    s = pd.to_datetime(sub_edges["posting_date"], errors="coerce").dropna()
+    if s.empty:
+        return None, None
+    return s.min().date(), s.max().date()
+
+
+def filter_edges_by_date(sub_edges: pd.DataFrame, start, end) -> pd.DataFrame:
+    """전기일이 [start, end] 범위인 엣지만(날짜 없는 엣지는 보존)."""
+    if sub_edges.empty or "posting_date" not in sub_edges.columns:
+        return sub_edges
+    d = pd.to_datetime(sub_edges["posting_date"], errors="coerce").dt.date
+    keep = d.isna() | ((d >= start) & (d <= end))
+    return sub_edges[keep]
+
+
+def timeline_table(sub_edges: pd.DataFrame) -> pd.DataFrame:
+    """전환/이동을 전기일 순으로 정렬한 타임라인 표."""
+    if sub_edges.empty:
+        return sub_edges
+    df = sub_edges.copy()
+    df["일자"] = df["posting_date"].map(_edge_date)
+    df["_d"] = pd.to_datetime(df["posting_date"], errors="coerce")
+    df["전환"] = df.apply(lambda r: f'{r.get("from_tier","")}→{r.get("to_tier","")}', axis=1)
+    cols = {"일자": "일자", "edge_kind": "규칙", "from_material": "from_자재", "from_batch": "from_배치",
+            "to_material": "to_자재", "to_batch": "to_배치", "전환": "전환",
+            "alloc_qty": "수량", "source_rule": "근거"}
+    have = [c for c in cols if c in df.columns]
+    out = df.sort_values(["_d"], na_position="last")[have].rename(columns=cols)
+    return out.reset_index(drop=True)
 
 
 def tier_legend() -> List[Tuple[str, str]]:

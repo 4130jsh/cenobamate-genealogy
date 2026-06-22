@@ -217,6 +217,24 @@ def test_transfer_link_styled():
     assert dot.count('label="이전"') == 1, "제조 전환에 잘못 '이전' 라벨이 붙음"
 
 
+def test_timeline_and_date_features():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    start = "5CNT014A1ZZZ||FP-B1"
+    sub, _, _ = gdb.trace_subgraph(edges, start, "upstream")
+    # 타임라인: 전기일 순 정렬 표
+    tl = gdb.timeline_table(sub)
+    assert "일자" in tl.columns and "전환" in tl.columns and len(tl) == len(sub)
+    # 날짜 라벨이 DOT 에 들어감
+    dot = gdb.build_dot(sub, nodes, start, "upstream", show_dates=True)
+    assert "label=" in dot  # 엣지/노드 라벨 존재
+    # 날짜 범위 필터
+    lo, hi = gdb.edge_date_bounds(sub)
+    assert lo is not None and hi is not None
+    f = gdb.filter_edges_by_date(sub, lo, hi)
+    assert len(f) == len(sub)  # 전체 범위면 전부 유지
+
+
 def test_dot_to_html_full_graph():
     dot = "digraph { a -> b; }"
     html = gdb.dot_to_html(dot, "테스트")
