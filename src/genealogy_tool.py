@@ -201,6 +201,7 @@ class BomMaster:
     sloc_desc: Dict[Tuple[str, str], str]
     material_to_routes: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
     material_to_input_groups: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)
+    interchangeable: Dict[str, Set[str]] = field(default_factory=dict)
 
 
 # ============================================================
@@ -385,9 +386,17 @@ class GenealogyTool:
         sloc_stage = {(clean_str(r.get("plant", "")), clean_code(r.get("location", ""))): clean_str(r.get("material_stage", "")) for _, r in sloc.iterrows()}
         sloc_desc = {(clean_str(r.get("plant", "")), clean_code(r.get("location", ""))): clean_str(r.get("description", "")) for _, r in sloc.iterrows()}
 
+        # 호환 원료 관계: 같은 input_group 에 함께 속한 자재끼리 상호 대체 가능
+        interchangeable: Dict[str, Set[str]] = defaultdict(set)
+        for groups in material_to_input_groups.values():
+            for codes in groups.values():
+                cs = set(codes)
+                for c in cs:
+                    interchangeable[c] |= (cs - {c})
+
         return BomMaster(material, bom_edges, plant, sloc, legacy, material_to_tier, material_to_desc,
                          dict(material_to_inputs), legacy_to_current, plant_role, sloc_stage, sloc_desc,
-                         material_to_routes, material_to_input_groups)
+                         material_to_routes, material_to_input_groups, dict(interchangeable))
 
     @staticmethod
     def tier_from_bom_row(r: pd.Series) -> str:
@@ -975,10 +984,12 @@ class GenealogyTool:
         if self.legacy_transfer_pairing:
             return abs(nt - pt) <= 1             # 구 동작(하위호환): tier 1 이내면 허용
         # 다른 material: 같은 tier 의 strength 변경 등 불가능 전환을 차단.
-        #   같은 tier → BOM 이 입력관계를 인정할 때만 허용(사실상 strength 교차 차단)
+        #   같은 tier → BOM 입력관계 OR 호환그룹(같은 input_group, 예: EU↔US RSM 309 이체)일 때만 허용
+        #             (사실상 strength 교차는 차단, 호환 원료 간 재분류는 허용)
         #   인접 tier → BOM 정합이면 허용, 아니면(데이터 한계) 보수적으로 허용 유지
         if nt == pt:
-            return self.bom_consistent(nrow["material"], prow["material"])
+            return (self.bom_consistent(nrow["material"], prow["material"])
+                    or prow["material"] in self.bom.interchangeable.get(nrow["material"], set()))
         if abs(nt - pt) == 1:
             return True
         return False

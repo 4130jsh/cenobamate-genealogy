@@ -220,6 +220,15 @@ def test_interchangeable_rsm_group_any_satisfies():
         f"호환 RSM 그룹 중 하나 실측됐는데 나머지가 BOM 기대로 뜸: {expmats}"
 
 
+def test_interchangeable_rsm_conversion_edge():
+    # 호환 RSM 간 자재이체(309) EU(1CNY002)→US(1CNY001) 는 전환 엣지로 잡혀야 함(같은 호환그룹)
+    tool, _ = _build()
+    e = tool.edges
+    conv = e[(e["from_material"] == "1CNY002ZZZZZ") & (e["to_material"] == "1CNY001ZZZZZ")
+             & (e["from_batch"] == "TCAPX") & (e["to_batch"] == "TCAPX")]
+    assert not conv.empty, "호환 RSM 전환(EU→US 309) 엣지가 잡히지 않음"
+
+
 def test_reversal_and_exclude_ignored():
     tool, _ = _build()
     # 102(reversal)/921(exclude) 로만 이뤄진 문서는 엣지를 만들지 않아야 함
