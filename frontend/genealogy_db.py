@@ -236,20 +236,62 @@ def node_date_bounds(nodes_df: pd.DataFrame, date_col: str = "first_posting_date
     return s.min().date(), s.max().date()
 
 
+def production_dates(edges_df: pd.DataFrame, kinds=("PROD",)) -> Dict[str, str]:
+    """node → 생산 전기일(YYYY-MM-DD) 맵. 기본 PROD(101) 엣지의 산출측 전기일 최소값.
+
+    같은 배치가 여러 번 생산(재생산 등)됐으면 가장 이른 생산일을 쓴다.
+    PROD 엣지가 없는 배치(구매 입고 RSM 등)는 맵에 들어가지 않는다(엄밀 모드에서 제외).
+    """
+    if edges_df.empty:
+        return {}
+    sub = edges_df[edges_df["edge_kind"].isin(kinds)] if kinds else edges_df
+    col = "to_posting_date" if "to_posting_date" in sub.columns else "posting_date"
+    out: Dict[str, str] = {}
+    for n, d in zip(sub["to_node"], sub[col]):
+        dd = _edge_date(d)
+        if not dd:
+            continue
+        if n not in out or dd < out[n]:
+            out[n] = dd
+    return out
+
+
+def date_map_bounds(date_map: Optional[Dict[str, str]]):
+    """node→날짜 맵 값들의 (최소, 최대) date. 없으면 (None, None)."""
+    vals = [v for v in (date_map or {}).values() if v]
+    if not vals:
+        return None, None
+    s = pd.to_datetime(pd.Series(vals), errors="coerce").dropna()
+    if s.empty:
+        return None, None
+    return s.min().date(), s.max().date()
+
+
 def nodes_in_period(nodes_df: pd.DataFrame, date_from=None, date_to=None,
                     tiers: Optional[List[str]] = None, query: str = "",
-                    date_col: str = "first_posting_date") -> pd.DataFrame:
+                    date_col: str = "first_posting_date",
+                    date_map: Optional[Dict[str, str]] = None) -> pd.DataFrame:
     """특정 기간에 제조/입고된 배치(노드) 선택. tier·텍스트 필터 가능.
 
-    date_col(기본 first_posting_date = 해당 배치의 최초 전기일 ≈ 제조/입고 시점)이
-    [date_from, date_to] 에 드는 노드만. 결과는 추적 시작점(앵커) 목록으로 쓴다.
+    - date_map 이 주어지면 그 맵(node→날짜, 예: 생산 101 전기일)을 기준으로 필터하고,
+      맵에 날짜가 없는 노드는 제외(엄밀 모드: 실제 생산된 배치만).
+    - 없으면 date_col(기본 first_posting_date ≈ 최초 전기일/입고 포함)로 필터.
+    결과는 추적 시작점(앵커) 목록으로 쓴다.
     """
     if nodes_df.empty:
         return nodes_df
     sub = nodes_df
     if tiers:
         sub = sub[sub["tier"].isin(tiers)]
-    if (date_from or date_to) and date_col in sub.columns:
+    if date_map is not None:
+        d = pd.to_datetime(sub["node"].map(date_map), errors="coerce").dt.date
+        keep = d.notna()
+        if date_from:
+            keep &= d >= date_from
+        if date_to:
+            keep &= d <= date_to
+        sub = sub[keep]
+    elif (date_from or date_to) and date_col in sub.columns:
         d = pd.to_datetime(sub[date_col], errors="coerce").dt.date
         keep = d.notna()
         if date_from:

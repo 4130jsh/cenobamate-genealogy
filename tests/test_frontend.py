@@ -369,6 +369,27 @@ def test_nodes_in_period_and_upstream():
         "FP-B1 상류 합산에 RSM→API 가 없음"
 
 
+def test_production_date_strict_anchor():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    prod = gdb.production_dates(edges)   # PROD(101) 엣지의 산출측 전기일
+    assert prod, "생산일 맵이 비어 있음"
+    # 케이스1: RSM-B1 소비 + API-B1 산출(101) 2026-01-05 → API-B1 생산일 잡힘
+    api_node = nodes[nodes["batch"] == "API-B1"]["node"].iloc[0]
+    assert prod.get(api_node) == "2026-01-05", f"API-B1 생산일 오류: {prod.get(api_node)}"
+    # 구매 입고만 있는 RSM(원천)에는 PROD 엣지가 없어 생산일 맵에서 제외
+    rsm_node = nodes[nodes["batch"] == "RSM-B1"]["node"].iloc[0]
+    assert rsm_node not in prod, "생산 엣지 없는 RSM 이 생산일 맵에 잘못 포함됨"
+
+    import datetime as dt
+    d = dt.date(2026, 1, 5)
+    strict = gdb.nodes_in_period(nodes, d, d, tiers=["API"], date_map=prod)
+    assert (strict["batch"] == "API-B1").any(), "엄밀 모드로 API-B1 이 안 잡힘"
+    # 같은 날 first_posting_date 로는 잡히지 않는 노드와 결과가 다를 수 있음(엄밀성 확인)
+    bounds = gdb.date_map_bounds(prod)
+    assert bounds[0] is not None and bounds[0] <= bounds[1]
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

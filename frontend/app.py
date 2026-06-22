@@ -256,13 +256,25 @@ def _render_flow_search(edges, nodes) -> None:
 
 def _render_period_production(edges, nodes, bom_expected, legacy, plant_map) -> None:
     """특정 기간에 제조/입고된 배치를 찾아 각 배치의 전체 상류 흐름을 보는 탭."""
-    st.caption("특정 기간에 제조/입고된 배치를 찾아, 각 배치의 전체 상류 흐름(RSM→해당 배치)을 본다. "
-               "기준 시점 = 배치의 최초 전기일(제조/입고).")
-    pmin, pmax = gdb.node_date_bounds(nodes)
-    if not pmin:
-        st.info("노드에 제조/입고일(first_posting_date) 정보가 없습니다. "
-                "결과 DB를 최신 엔진으로 재빌드하세요.")
-        return
+    st.caption("특정 기간에 제조/입고된 배치를 찾아, 각 배치의 전체 상류 흐름(RSM→해당 배치)을 본다.")
+    basis = st.radio("제조일 기준", ["생산(101) 엣지 날짜 — 엄밀", "최초 전기일 — 입고 포함"],
+                     horizontal=True, key="pp_basis",
+                     help="엄밀: 실제 생산(101)된 배치만, 그 생산 전기일 기준. "
+                          "입고 포함: 구매 입고 등 최초 전기일 기준(생산 엣지 없는 배치도 포함).")
+    strict = basis.startswith("생산")
+    prod_map = gdb.production_dates(edges) if strict else None
+    if strict:
+        pmin, pmax = gdb.date_map_bounds(prod_map)
+        if not pmin:
+            st.info("생산(101) 엣지가 없어 엄밀 모드로 잡히는 배치가 없습니다. "
+                    "'최초 전기일' 기준을 쓰거나 결과 DB를 재빌드하세요.")
+            return
+    else:
+        pmin, pmax = gdb.node_date_bounds(nodes)
+        if not pmin:
+            st.info("노드에 제조/입고일(first_posting_date) 정보가 없습니다. "
+                    "결과 DB를 최신 엔진으로 재빌드하세요.")
+            return
     c1, c2 = st.columns([2, 2])
     tiers = c1.multiselect("제조 배치 tier", ["FP", "SP", "DP", "API", "RSM", "OTHER"],
                            default=["FP"], key="pp_tier")
@@ -273,19 +285,26 @@ def _render_period_production(edges, nodes, bom_expected, legacy, plant_map) -> 
         date_from, date_to = pmin, pmax
         st.caption(f"제조/입고일: {pmin}")
 
-    anchors = gdb.nodes_in_period(nodes, date_from, date_to, tiers, query=query)
+    anchors = gdb.nodes_in_period(nodes, date_from, date_to, tiers, query=query, date_map=prod_map)
+    # 생산일(또는 최초 전기일)을 표·라벨에 표시
+    anchors = anchors.copy()
+    if strict:
+        anchors["생산일"] = anchors["node"].map(prod_map)
+        date_field = "생산일"
+    else:
+        date_field = "first_posting_date"
     st.caption(f"기간 내 제조/입고 배치: {len(anchors):,}개")
     if anchors.empty:
         st.info("조건에 맞는 제조/입고 배치가 없습니다.")
         return
     show_cols = [c for c in ["tier", "material", "description", "batch",
-                             "first_posting_date", "location", "cmo"] if c in anchors.columns]
+                             date_field, "location", "cmo"] if c in anchors.columns]
     st.dataframe(anchors[show_cols], use_container_width=True, hide_index=True)
 
     mode = st.radio("상류 보기 방식", ["배치 1건 선택", "전체 합쳐 보기"],
                     horizontal=True, key="pp_mode")
     if mode == "배치 1건 선택":
-        dcol = anchors["first_posting_date"] if "first_posting_date" in anchors.columns else anchors["batch"]
+        dcol = anchors[date_field] if date_field in anchors.columns else anchors["batch"]
         labels = {n: f"[{t}] {m} / {b}  ({str(d)[:10]})" for n, t, m, b, d in
                   zip(anchors["node"], anchors["tier"], anchors["material"], anchors["batch"], dcol)}
         sel = st.selectbox(f"배치 선택 ({len(anchors):,}개) → 상류 전체", anchors["node"].tolist(),
