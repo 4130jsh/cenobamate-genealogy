@@ -200,12 +200,12 @@ def flow_search(edges_df: pd.DataFrame, nodes_df: pd.DataFrame,
     if kinds:
         df = df[df["edge_kind"].isin(kinds)]
     if (date_from or date_to) and "posting_date" in df.columns:
-        d = pd.to_datetime(df["posting_date"], errors="coerce").dt.date
+        d = pd.to_datetime(df["posting_date"], errors="coerce")
         keep = d.notna()
         if date_from:
-            keep &= d >= date_from
+            keep &= d >= pd.Timestamp(date_from)
         if date_to:
-            keep &= d <= date_to
+            keep &= d <= pd.Timestamp(date_to)
         df = df[keep]
     if locations and not df.empty:
         node_loc = dict(zip(nodes_df["node"], nodes_df["location"])) \
@@ -284,20 +284,20 @@ def nodes_in_period(nodes_df: pd.DataFrame, date_from=None, date_to=None,
     if tiers:
         sub = sub[sub["tier"].isin(tiers)]
     if date_map is not None:
-        d = pd.to_datetime(sub["node"].map(date_map), errors="coerce").dt.date
+        d = pd.to_datetime(sub["node"].map(date_map), errors="coerce")
         keep = d.notna()
         if date_from:
-            keep &= d >= date_from
+            keep &= d >= pd.Timestamp(date_from)
         if date_to:
-            keep &= d <= date_to
+            keep &= d <= pd.Timestamp(date_to)
         sub = sub[keep]
     elif (date_from or date_to) and date_col in sub.columns:
-        d = pd.to_datetime(sub[date_col], errors="coerce").dt.date
+        d = pd.to_datetime(sub[date_col], errors="coerce")
         keep = d.notna()
         if date_from:
-            keep &= d >= date_from
+            keep &= d >= pd.Timestamp(date_from)
         if date_to:
-            keep &= d <= date_to
+            keep &= d <= pd.Timestamp(date_to)
         sub = sub[keep]
     q = (query or "").strip().upper()
     if q:
