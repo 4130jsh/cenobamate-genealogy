@@ -647,142 +647,20 @@ def filter_edges_by_date(sub_edges: pd.DataFrame, start, end) -> pd.DataFrame:
     return sub_edges[keep]
 
 
-def _num(series: pd.Series) -> pd.Series:
-    """문자/혼합 수량 컬럼을 float 으로(불가 시 NaN)."""
-    return pd.to_numeric(series, errors="coerce")
-
-
-def _in_qty(df: pd.DataFrame) -> pd.Series:
-    """투입량: alloc_qty(분할매칭 반영) 우선, 없으면 |from_qty|."""
-    q = _num(df["alloc_qty"]).abs() if "alloc_qty" in df.columns else pd.Series(index=df.index, dtype="float64")
-    if "from_qty" in df.columns:
-        q = q.fillna(_num(df["from_qty"]).abs())
-    return q
-
-
-def _out_qty(df: pd.DataFrame) -> pd.Series:
-    """산출량: |to_qty|."""
-    return _num(df["to_qty"]).abs() if "to_qty" in df.columns else pd.Series(index=df.index, dtype="float64")
-
-
 def timeline_table(sub_edges: pd.DataFrame) -> pd.DataFrame:
-    """전환/이동을 전기일 순으로 정렬한 타임라인 표(투입량·산출량·전환비 포함)."""
+    """전환/이동을 전기일 순으로 정렬한 타임라인 표."""
     if sub_edges.empty:
         return sub_edges
     df = sub_edges.copy()
     df["일자"] = df["posting_date"].map(_edge_date)
     df["_d"] = pd.to_datetime(df["posting_date"], errors="coerce")
     df["전환"] = df.apply(lambda r: f'{r.get("from_tier","")}→{r.get("to_tier","")}', axis=1)
-    inq, outq = _in_qty(df), _out_qty(df)
-    df["투입량"] = inq.round(3)
-    df["산출량"] = outq.round(3)
-    # 전환비 = 산출/투입 (PROD 의 실제 전환수율). 투입 0/결측이면 공란.
-    df["전환비"] = (outq / inq.where(inq > 0)).round(3)
-    cols = {"일자": "일자", "edge_kind": "규칙", "from_material": "from_자재",
-            "from_batch": "from_배치", "to_material": "to_자재", "to_batch": "to_배치", "전환": "전환",
-            "투입량": "투입량", "from_uom": "투입UoM", "산출량": "산출량", "to_uom": "산출UoM",
-            "전환비": "전환비(산출/투입)", "source_rule": "근거"}
+    cols = {"일자": "일자", "edge_kind": "규칙", "from_material": "from_자재", "from_batch": "from_배치",
+            "to_material": "to_자재", "to_batch": "to_배치", "전환": "전환",
+            "alloc_qty": "수량", "source_rule": "근거"}
     have = [c for c in cols if c in df.columns]
     out = df.sort_values(["_d"], na_position="last")[have].rename(columns=cols)
     return out.reset_index(drop=True)
-
-
-def mass_balance(sub_edges: pd.DataFrame, kinds=("PROD",)) -> pd.DataFrame:
-    """산출 배치별 물질수지: 산출량 vs 총 투입량 vs 전환비.
-
-    PROD 엣지를 산출 노드(to_node) 기준으로 묶어 한 줄 요약한다.
-    - 산출량: 그 배치 생산량(to_qty; 같은 배치 복수 생산이면 최대값)
-    - 총투입: Σ alloc_qty(투입 자재들 합; UoM 이 섞일 수 있으니 투입UoM 함께 표기)
-    - 전환비: 산출량 / 총투입 (투입UoM 단일일 때 의미 있음)
-    """
-    if sub_edges.empty:
-        return pd.DataFrame()
-    df = sub_edges
-    if kinds and "edge_kind" in df.columns:
-        df = df[df["edge_kind"].isin(kinds)]
-    if df.empty:
-        return pd.DataFrame()
-    df = df.copy()
-    df["_in"] = _in_qty(df)
-    df["_out"] = _out_qty(df)
-    rows = []
-    for to_node, g in df.groupby("to_node"):
-        in_uoms = sorted({str(u).strip() for u in g.get("from_uom", pd.Series(dtype=str)) if str(u).strip()})
-        out_uom = next((str(u).strip() for u in g.get("to_uom", pd.Series(dtype=str)) if str(u).strip()), "")
-        total_in = float(g["_in"].sum(skipna=True))
-        out_q = float(g["_out"].max(skipna=True)) if g["_out"].notna().any() else float("nan")
-        ratio = round(out_q / total_in, 3) if total_in > 0 and out_q == out_q else None
-        rows.append({
-            "산출_tier": g["to_tier"].iloc[0] if "to_tier" in g else "",
-            "산출_자재": g["to_material"].iloc[0] if "to_material" in g else "",
-            "산출_배치": g["to_batch"].iloc[0] if "to_batch" in g else "",
-            "산출량": round(out_q, 3) if out_q == out_q else None,
-            "산출UoM": out_uom,
-            "총투입": round(total_in, 3),
-            "투입UoM": ", ".join(in_uoms),
-            "투입자재수": int(g["from_node"].nunique()),
-            "전환비": ratio,
-            "UoM단일": len(in_uoms) <= 1 and (not out_uom or not in_uoms or out_uom in in_uoms),
-        })
-    out = pd.DataFrame(rows)
-    if not out.empty:
-        out = out.sort_values(["산출_tier", "산출_자재", "산출_배치"]).reset_index(drop=True)
-    return out
-
-
-def completeness_stats(nodes_df: pd.DataFrame, edges_df: pd.DataFrame,
-                       bom_expected_df: pd.DataFrame) -> dict:
-    """데이터 완성도/신뢰도 지표 묶음(대시보드용).
-
-    - tier_counts: tier 별 노드 수
-    - kind_counts: edge_kind 분포
-    - confidence_counts: confidence 분포
-    - orphan: 들어오는·나가는 엣지가 모두 없는 고립 노드 수/목록
-    - date_violations / uom_mismatch: 인과·단위 이상 엣지 수
-    - broken_upstream: 노드 중 상류 입력 엣지가 하나도 없는 비-RSM 노드(끊긴 상류 후보)
-    - bom_expected_total / bom_expected_nodes: BOM 기대(미실측 상류) 항목/대상 노드 수
-    """
-    s: dict = {}
-    n = len(nodes_df)
-    s["node_total"] = n
-    s["edge_total"] = len(edges_df)
-    s["tier_counts"] = (nodes_df["tier"].value_counts().to_dict()
-                        if not nodes_df.empty and "tier" in nodes_df.columns else {})
-    s["kind_counts"] = (edges_df["edge_kind"].value_counts().to_dict()
-                        if not edges_df.empty and "edge_kind" in edges_df.columns else {})
-    s["confidence_counts"] = (edges_df["confidence"].value_counts().to_dict()
-                              if not edges_df.empty and "confidence" in edges_df.columns else {})
-
-    from_nodes = set(edges_df["from_node"]) if not edges_df.empty else set()
-    to_nodes = set(edges_df["to_node"]) if not edges_df.empty else set()
-    connected = from_nodes | to_nodes
-    all_nodes = set(nodes_df["node"]) if not nodes_df.empty else set()
-    orphan = sorted(all_nodes - connected)
-    s["orphan_count"] = len(orphan)
-    s["orphan_nodes"] = orphan
-
-    s["date_violations"] = (int(edges_df["date_violation"].astype(bool).sum())
-                            if not edges_df.empty and "date_violation" in edges_df.columns else 0)
-    s["uom_mismatch"] = (int((~edges_df["uom_match"].astype(bool)).sum())
-                         if not edges_df.empty and "uom_match" in edges_df.columns else 0)
-
-    # 끊긴 상류 후보: 비-RSM 노드인데 들어오는(to) 엣지가 없는 노드
-    if not nodes_df.empty:
-        broken = nodes_df[(nodes_df["tier"] != "RSM") & (~nodes_df["node"].isin(to_nodes))]
-        s["broken_upstream_count"] = int(len(broken))
-        s["broken_upstream_by_tier"] = broken["tier"].value_counts().to_dict()
-    else:
-        s["broken_upstream_count"] = 0
-        s["broken_upstream_by_tier"] = {}
-
-    if bom_expected_df is not None and not bom_expected_df.empty:
-        s["bom_expected_total"] = int(len(bom_expected_df))
-        col = "to_node" if "to_node" in bom_expected_df.columns else None
-        s["bom_expected_nodes"] = int(bom_expected_df[col].nunique()) if col else 0
-    else:
-        s["bom_expected_total"] = 0
-        s["bom_expected_nodes"] = 0
-    return s
 
 
 def tier_legend() -> List[Tuple[str, str]]:
