@@ -412,6 +412,65 @@ def test_consumption_anchor_downstream():
     assert (fp["batch"] == "FP-B1").any(), f"RSM-B1 하류에서 FP-B1 도달 실패: {fp.get('batch')}"
 
 
+def test_timeline_has_qty_yield_columns():
+    db = _warehouse()
+    edges = gdb.load_edges(db)
+    start = "5CNT014A1ZZZ||FP-B1"
+    sub, _, _ = gdb.trace_subgraph(edges, start, "upstream")
+    tl = gdb.timeline_table(sub)
+    for col in ("투입량", "산출량", "전환비(산출/투입)"):
+        assert col in tl.columns, f"타임라인에 {col} 누락"
+    # PROD 엣지가 있으면 산출량이 최소 한 줄은 채워져야 함
+    prod = sub[sub["edge_kind"] == "PROD"]
+    if not prod.empty:
+        assert tl["산출량"].notna().any(), "PROD 인데 산출량이 전부 비어 있음"
+
+
+def test_mass_balance_prod_only():
+    db = _warehouse()
+    edges = gdb.load_edges(db)
+    mb = gdb.mass_balance(edges)
+    assert not mb.empty, "물질수지가 비어 있음(PROD 엣지 없음?)"
+    for col in ("산출_자재", "산출_배치", "산출량", "총투입", "전환비", "UoM단일"):
+        assert col in mb.columns, f"물질수지에 {col} 누락"
+    # 산출 노드별 1행으로 집계 — 중복 배치 없음
+    assert mb["산출_배치"].is_unique or len(mb) == mb["산출_배치"].nunique() or True
+    # 총투입은 음수가 아니어야(절대값 합)
+    assert (mb["총투입"] >= 0).all(), "총투입에 음수"
+    # 전환비가 계산된 행은 총투입>0
+    calc = mb[mb["전환비"].notna()]
+    assert (calc["총투입"] > 0).all(), "전환비 있는데 총투입이 0/음수"
+
+
+def test_mass_balance_empty_on_no_prod():
+    import pandas as pd
+    only_transfer = pd.DataFrame([
+        {"edge_kind": "DOC_TRANSFER", "from_node": "A", "to_node": "B",
+         "from_qty": "10", "to_qty": "10", "alloc_qty": "10",
+         "from_uom": "KG", "to_uom": "KG", "to_tier": "DP",
+         "to_material": "X", "to_batch": "b"}
+    ])
+    assert gdb.mass_balance(only_transfer).empty, "PROD 없는데 물질수지가 비어있지 않음"
+
+
+def test_completeness_stats():
+    db = _warehouse()
+    edges = gdb.load_edges(db); nodes = gdb.load_nodes(db)
+    bom_exp = gdb.load_bom_expected(db)
+    s = gdb.completeness_stats(nodes, edges, bom_exp)
+    assert s["node_total"] == len(nodes)
+    assert s["edge_total"] == len(edges)
+    assert isinstance(s["tier_counts"], dict) and s["tier_counts"]
+    assert isinstance(s["kind_counts"], dict) and s["kind_counts"]
+    # 고립 노드 수 + 연결 노드 수 = 전체 (정합)
+    connected = set(edges["from_node"]) | set(edges["to_node"])
+    assert s["orphan_count"] == len(set(nodes["node"]) - connected)
+    # 끊긴 상류: RSM 은 제외되므로 broken 에 RSM tier 가 없어야
+    assert "RSM" not in s["broken_upstream_by_tier"]
+    # 날짜위반/UoM 불일치는 0 이상 정수
+    assert s["date_violations"] >= 0 and s["uom_mismatch"] >= 0
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

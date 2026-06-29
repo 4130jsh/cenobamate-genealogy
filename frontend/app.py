@@ -89,7 +89,7 @@ def main() -> None:
         st.stop()
 
     tabs = st.tabs(["⬆️ 상류 (FP→RSM)", "⬇️ 하류 (RSM→FP)", "🔎 흐름 검색",
-                    "📅 기간 추적", "📋 노드/엣지", "🗂 빌드·적재 이력"])
+                    "📅 기간 추적", "⚖️ 수율·완성도", "📋 노드/엣지", "🗂 빌드·적재 이력"])
 
     # ── Tab 1: 상류 그래프 + BOM_EXPECTED ─────────────────────
     with tabs[0]:
@@ -131,8 +131,12 @@ def main() -> None:
     with tabs[3]:
         _render_period_trace(edges, nodes, bom_expected, legacy, plant_map)
 
-    # ── Tab 5: 노드/엣지 테이블 ──────────────────────────────
+    # ── Tab 5: 수율·완성도 대시보드 ─────────────────────────
     with tabs[4]:
+        _render_quality(edges, nodes, bom_expected)
+
+    # ── Tab 6: 노드/엣지 테이블 ──────────────────────────────
+    with tabs[5]:
         st.subheader("노드")
         c1, c2 = st.columns([2, 2])
         nq = c1.text_input("노드 검색(material/batch)")
@@ -143,8 +147,8 @@ def main() -> None:
         ev = edges if not kind_filter else edges[edges["edge_kind"].isin(kind_filter)]
         st.dataframe(ev, use_container_width=True, hide_index=True)
 
-    # ── Tab 6: 이력 ─────────────────────────────────────────
-    with tabs[5]:
+    # ── Tab 7: 이력 ─────────────────────────────────────────
+    with tabs[6]:
         st.subheader("빌드 이력 (build_runs)")
         st.dataframe(runs, use_container_width=True, hide_index=True)
         st.subheader("적재 이력 (ingest_log)")
@@ -159,6 +163,85 @@ def _edge_table(sub):
                         "from_posting_date", "to_material", "to_desc", "to_batch", "to_tier",
                         "to_posting_date", "confidence", "date_violation", "source_rule"] if c in sub.columns]
     st.dataframe(sub[cols], use_container_width=True, hide_index=True)
+
+
+def _show_mass_balance(sub, keyp: str) -> None:
+    """이 경로의 산출 배치별 물질수지(투입→산출, 전환비) 표."""
+    mb = gdb.mass_balance(sub)
+    if mb.empty:
+        return
+    with st.expander(f"⚖️ 물질수지 — 산출 배치 {len(mb):,}개 (투입→산출·전환비)"):
+        st.caption("PROD(생산) 엣지 기준. 전환비=산출량/총투입. 투입 UoM 이 단일일 때 의미가 큽니다"
+                   "(섞인 경우 'UoM단일'=False). 같은 배치가 여러 번 생산되면 산출량은 최대값.")
+        st.dataframe(mb, use_container_width=True, hide_index=True)
+        st.download_button("⬇️ 물질수지 CSV", mb.to_csv(index=False).encode("utf-8-sig"),
+                           file_name=f"mass_balance_{keyp}.csv", mime="text/csv",
+                           key=f"mb_dl_{keyp}", use_container_width=True)
+
+
+def _render_quality(edges, nodes, bom_expected) -> None:
+    """데이터 완성도/신뢰도 + 전체 물질수지 대시보드."""
+    st.caption("이 빌드 결과를 '어디까지 믿을 수 있나' 한눈에. 끊긴 상류·날짜위반·고립노드·UoM 불일치를 집계한다.")
+    s = gdb.completeness_stats(nodes, edges, bom_expected)
+
+    n_total = max(s["node_total"], 1)
+    e_total = max(s["edge_total"], 1)
+    c = st.columns(4)
+    broken = s["broken_upstream_count"]
+    c[0].metric("끊긴 상류 노드", f"{broken:,}", f"{broken / n_total * 100:.0f}% of 노드",
+                delta_color="inverse")
+    c[1].metric("고립 노드(엣지無)", f"{s['orphan_count']:,}",
+                f"{s['orphan_count'] / n_total * 100:.0f}%", delta_color="inverse")
+    c[2].metric("날짜위반 엣지", f"{s['date_violations']:,}",
+                f"{s['date_violations'] / e_total * 100:.1f}%", delta_color="inverse")
+    c[3].metric("UoM 불일치 엣지", f"{s['uom_mismatch']:,}",
+                f"{s['uom_mismatch'] / e_total * 100:.1f}%", delta_color="inverse")
+    st.caption(f"BOM 기대(미실측 상류) 항목 {s['bom_expected_total']:,}개 · 대상 노드 {s['bom_expected_nodes']:,}개. "
+               "단일 기간 export 에서는 상류가 끊겨 이 값들이 큰 게 정상입니다.")
+
+    import pandas as pd
+    cc = st.columns(3)
+    with cc[0]:
+        st.markdown("**Tier 별 노드**")
+        if s["tier_counts"]:
+            st.dataframe(pd.DataFrame(sorted(s["tier_counts"].items()), columns=["tier", "노드수"]),
+                         use_container_width=True, hide_index=True)
+    with cc[1]:
+        st.markdown("**전환/이동 유형(엣지)**")
+        if s["kind_counts"]:
+            st.dataframe(pd.DataFrame(sorted(s["kind_counts"].items()), columns=["edge_kind", "엣지수"]),
+                         use_container_width=True, hide_index=True)
+    with cc[2]:
+        st.markdown("**끊긴 상류 tier 분포**")
+        if s["broken_upstream_by_tier"]:
+            st.dataframe(pd.DataFrame(sorted(s["broken_upstream_by_tier"].items()), columns=["tier", "노드수"]),
+                         use_container_width=True, hide_index=True)
+        else:
+            st.caption("끊긴 상류 없음.")
+
+    if s["orphan_nodes"]:
+        with st.expander(f"고립 노드 목록 {s['orphan_count']:,}개 (들어오고 나가는 엣지가 모두 없음)"):
+            orphans = nodes[nodes["node"].isin(s["orphan_nodes"])]
+            ocols = [c for c in ["tier", "material", "description", "batch", "location", "cmo",
+                                 "first_posting_date"] if c in orphans.columns]
+            st.dataframe(orphans[ocols], use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.subheader("⚖️ 전체 물질수지 (PROD 기준)")
+    mb = gdb.mass_balance(edges)
+    if mb.empty:
+        st.info("PROD(생산) 엣지가 없어 물질수지를 계산할 수 없습니다.")
+        return
+    mixed = int((~mb["UoM단일"]).sum()) if "UoM단일" in mb.columns else 0
+    st.caption(f"산출 배치 {len(mb):,}개. 전환비=산출량/총투입(투입UoM 단일일 때 신뢰도 높음). "
+               f"UoM 혼합 산출 {mixed:,}개는 전환비 해석 주의.")
+    ft = st.multiselect("산출 tier 필터", sorted(mb["산출_tier"].dropna().unique().tolist()),
+                        default=[], key="mb_tier")
+    view = mb if not ft else mb[mb["산출_tier"].isin(ft)]
+    st.dataframe(view, use_container_width=True, hide_index=True)
+    st.download_button("⬇️ 전체 물질수지 CSV", view.to_csv(index=False).encode("utf-8-sig"),
+                       file_name="mass_balance_all.csv", mime="text/csv",
+                       key="mb_all_dl", use_container_width=True)
 
 
 def _render_trace(nodes, sub, visited, sel, direction, exp, keyp, plant_map=None):
@@ -187,6 +270,7 @@ def _render_trace(nodes, sub, visited, sel, direction, exp, keyp, plant_map=None
         st.caption("표시할 전환/이동이 없습니다.")
     else:
         st.dataframe(tl, use_container_width=True, hide_index=True)
+    _show_mass_balance(sub_f, keyp)
     if exp:
         with st.expander(f"끊긴 상류(BOM_EXPECTED) {len(exp)}개"):
             st.dataframe(exp, use_container_width=True, hide_index=True)
@@ -247,6 +331,7 @@ def _render_flow_search(edges, nodes) -> None:
 
     st.subheader("🕒 타임라인 (전기일 순)")
     st.dataframe(gdb.timeline_table(res), use_container_width=True, hide_index=True)
+    _show_mass_balance(res, "flow")
     with st.expander(f"엣지 테이블(상세) — {len(res):,}건"):
         _edge_table(res)
     st.download_button("⬇️ 검색결과 CSV", res.to_csv(index=False).encode("utf-8-sig"),
@@ -360,6 +445,7 @@ def _render_period_trace(edges, nodes, bom_expected, legacy, plant_map) -> None:
                        "'배치 1건 선택'으로 보거나 기간/tier 를 좁히세요.")
         st.subheader("🕒 타임라인 (전기일 순)")
         st.dataframe(gdb.timeline_table(res), use_container_width=True, hide_index=True)
+        _show_mass_balance(res, "ppall")
         with st.expander(f"엣지 테이블(상세) — {len(res):,}건"):
             _edge_table(res)
         st.download_button(f"⬇️ {flow_word} 합본 CSV", res.to_csv(index=False).encode("utf-8-sig"),
