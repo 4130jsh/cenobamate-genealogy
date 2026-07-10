@@ -25,6 +25,12 @@ python src/genealogy_tool.py \
 `<배치값>`은 `out/normalized_sap_rows.csv`의 `batch` 컬럼에서 실제 값을 고릅니다.
 **SAP export 파일은 민감 데이터라 리포에 포함되지 않습니다** — 본인 파일을 사용하세요.
 
+### Windows 원클릭 (적재 + 조회화면 한 번에)
+
+`data\sap\` 에 MB51 export(`EXPORT_*.xlsx`)를 넣고 **`start_genealogy.bat` 를 더블클릭**하면
+데이터 적재 → 재빌드 → Streamlit 조회화면 실행이 한 번에 됩니다.
+(신규 파일이 없으면 기존 warehouse 로 조회화면만 엽니다.)
+
 ## 무엇을 하나
 
 genealogy 그래프의 노드는 `(material, batch)` 쌍이고, 엣지(실제 계보 링크)는 3규칙으로 생성됩니다:
