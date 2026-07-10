@@ -31,6 +31,12 @@ python src/genealogy_tool.py \
 데이터 적재 → 재빌드 → Streamlit 조회화면 실행이 한 번에 됩니다.
 (신규 파일이 없으면 기존 warehouse 로 조회화면만 엽니다.)
 
+- **Python 은 배치가 자동으로 찾습니다** — `py` 런처 / PATH / Anaconda·Miniconda / python.org 순.
+  **conda 설치는 필수가 아닙니다.** 아무 Python 도 없으면 창이 꺼지지 않고 설치 안내를 띄웁니다.
+  필요한 패키지(streamlit 등)도 없으면 자동 설치합니다.
+- **첫 실행 팁**: Streamlit 을 처음 켜면 터미널이 `Email:` 에서 잠깐 멈춥니다 → 그냥 **Enter**.
+  브라우저가 자동으로 안 열리면 **http://localhost:8501** 로 접속. 종료는 창에서 **Ctrl+C**.
+
 ### 팀 공유 배포 (SharePoint/Teams 에 warehouse 두고 각자 조회)
 
 한 명(**빌더**)만 SAP 를 적재·재빌드하고, 결과 `warehouse.sqlite` 를 공유폴더에 두면
@@ -39,8 +45,8 @@ python src/genealogy_tool.py \
 
 1. **빌더 PC**: `start_genealogy.bat` 로 재빌드 후, 생성된 `data\warehouse.sqlite` 를
    SharePoint/Teams 문서 라이브러리에 올림(또는 그 동기화 폴더를 `--write-db` 대상으로 지정).
-2. **뷰어 PC**:
-   - 이 리포를 클론하고 `pip install -r requirements-frontend.txt` (최초 1회)
+2. **뷰어 PC** (conda 불필요, Python 만 있으면 됨):
+   - 이 리포를 클론 (패키지는 `view_genealogy.bat` 이 없으면 자동 설치)
    - 공유 라이브러리를 OneDrive 로 **동기화**(또는 "바로가기 추가") → 로컬 경로 생김
    - `warehouse_path.txt.example` → `warehouse_path.txt` 로 복사 후 그 로컬 경로 한 줄 기입
      (또는 환경변수 `GENEALOGY_WAREHOUSE` 지정)
