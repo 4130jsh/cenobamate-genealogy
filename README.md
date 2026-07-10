@@ -31,6 +31,25 @@ python src/genealogy_tool.py \
 데이터 적재 → 재빌드 → Streamlit 조회화면 실행이 한 번에 됩니다.
 (신규 파일이 없으면 기존 warehouse 로 조회화면만 엽니다.)
 
+### 팀 공유 배포 (SharePoint/Teams 에 warehouse 두고 각자 조회)
+
+한 명(**빌더**)만 SAP 를 적재·재빌드하고, 결과 `warehouse.sqlite` 를 공유폴더에 두면
+나머지(**뷰어**)는 각자 로컬에서 조회만 합니다. 프런트엔드는 `warehouse.sqlite` **하나만** 읽습니다
+(SAP·BOM DB 불필요).
+
+1. **빌더 PC**: `start_genealogy.bat` 로 재빌드 후, 생성된 `data\warehouse.sqlite` 를
+   SharePoint/Teams 문서 라이브러리에 올림(또는 그 동기화 폴더를 `--write-db` 대상으로 지정).
+2. **뷰어 PC**:
+   - 이 리포를 클론하고 `pip install -r requirements-frontend.txt` (최초 1회)
+   - 공유 라이브러리를 OneDrive 로 **동기화**(또는 "바로가기 추가") → 로컬 경로 생김
+   - `warehouse_path.txt.example` → `warehouse_path.txt` 로 복사 후 그 로컬 경로 한 줄 기입
+     (또는 환경변수 `GENEALOGY_WAREHOUSE` 지정)
+   - **`view_genealogy.bat` 더블클릭** → 조회 전용 실행 (적재/재빌드 안 함)
+3. 빌더가 warehouse 를 갱신하면, 뷰어는 사이드바 **🔄 최신 데이터 다시 읽기** 로 반영.
+
+> 공유폴더의 SQLite 를 직접 열면 잠금·동기화 충돌이 날 수 있어, 기본으로 **로컬 복사본을 읽는
+> 안전모드**가 켜져 있습니다(읽기 전용, 원본에 `-wal`/lock 파일을 만들지 않음). 사이드바에서 끌 수 있습니다.
+
 ## 무엇을 하나
 
 genealogy 그래프의 노드는 `(material, batch)` 쌍이고, 엣지(실제 계보 링크)는 3규칙으로 생성됩니다:

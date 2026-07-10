@@ -25,16 +25,38 @@ st.set_page_config(page_title="Cenobamate Genealogy", layout="wide")
 
 
 @st.cache_data(show_spinner=False)
-def _load(db_path: str, mtime: float):
+def _load(db_path: str, mtime: float, safe_copy: bool = True):
+    # 공유폴더(OneDrive/SharePoint) 안전모드: 원본을 직접 열지 않고 로컬 복사본을 읽는다.
+    path = gdb.snapshot_warehouse(db_path) if safe_copy else db_path
     return {
-        "edges": gdb.load_edges(db_path),
-        "nodes": gdb.load_nodes(db_path),
-        "runs": gdb.load_runs(db_path),
-        "ingest": gdb.load_ingest_log(db_path),
-        "bom_expected": gdb.load_bom_expected(db_path),
-        "legacy": gdb.load_legacy_map(db_path),
-        "plant_map": gdb.load_plant_map(db_path),
+        "edges": gdb.load_edges(path),
+        "nodes": gdb.load_nodes(path),
+        "runs": gdb.load_runs(path),
+        "ingest": gdb.load_ingest_log(path),
+        "bom_expected": gdb.load_bom_expected(path),
+        "legacy": gdb.load_legacy_map(path),
+        "plant_map": gdb.load_plant_map(path),
     }
+
+
+def _default_warehouse() -> str:
+    """warehouse 기본 경로 해석: 환경변수 → warehouse_path.txt(리포 루트) → data/warehouse.sqlite.
+
+    공유폴더(SharePoint/Teams) 배포 시 각 PC 마다 경로가 다르므로, 환경변수
+    GENEALOGY_WAREHOUSE 나 리포 루트의 warehouse_path.txt 한 줄로 지정해두면 매번 안 쳐도 된다.
+    """
+    env = os.environ.get("GENEALOGY_WAREHOUSE", "").strip()
+    if env:
+        return env
+    cfg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "warehouse_path.txt")
+    try:
+        if os.path.exists(cfg):
+            line = open(cfg, encoding="utf-8").read().strip()
+            if line and not line.startswith("#"):
+                return line
+    except OSError:
+        pass
+    return "data/warehouse.sqlite"
 
 
 def _legend_md() -> str:
@@ -64,13 +86,24 @@ def main() -> None:
     st.title("🧬 Cenobamate Batch Genealogy")
 
     st.sidebar.header("데이터")
-    db_path = st.sidebar.text_input("warehouse 경로", value="data/warehouse.sqlite")
+    db_path = st.sidebar.text_input(
+        "warehouse 경로", value=_default_warehouse(),
+        help="SharePoint/Teams 공유 warehouse.sqlite 의 로컬(OneDrive 동기화) 경로. "
+             "환경변수 GENEALOGY_WAREHOUSE 또는 리포 루트 warehouse_path.txt 로 기본값 지정 가능.")
+    safe_copy = st.sidebar.checkbox(
+        "공유폴더 안전모드(로컬 복사 후 열기)", value=True,
+        help="OneDrive/SharePoint 동기화 폴더의 파일을 직접 열면 잠금·동기화 충돌이 날 수 있어 "
+             "로컬 임시본을 복사해 읽습니다. 원본이 갱신되면 자동으로 다시 복사합니다.")
+    if st.sidebar.button("🔄 최신 데이터 다시 읽기", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
     if not os.path.exists(db_path):
         st.warning(f"warehouse 파일을 찾을 수 없습니다: `{db_path}`\n\n"
-                   "먼저 `--ingest` 로 적재하고 `--from-store --write-db` 로 결과 DB를 생성하세요.")
+                   "공유폴더(SharePoint/Teams) 경로가 로컬에 동기화됐는지 확인하거나, "
+                   "빌더 PC 에서 `--ingest --from-store --write-db` 로 결과 DB를 생성하세요.")
         st.stop()
 
-    data = _load(db_path, os.path.getmtime(db_path))
+    data = _load(db_path, os.path.getmtime(db_path), safe_copy)
     edges, nodes, runs = data["edges"], data["nodes"], data["runs"]
     ingest, bom_expected, legacy = data["ingest"], data["bom_expected"], data["legacy"]
     plant_map = data["plant_map"]

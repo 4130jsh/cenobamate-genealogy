@@ -14,6 +14,9 @@ EXPORT_*.xlsx
 # SAP 파일 전용 폴더 (이름 무관 통째로 제외)
 data/sap/
 
+# 개인별 공유 warehouse 로컬 경로 (PC마다 다름 — 템플릿 .example 만 커밋)
+warehouse_path.txt
+
 # Python
 __pycache__/
 *.pyc

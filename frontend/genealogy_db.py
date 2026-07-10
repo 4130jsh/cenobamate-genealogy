@@ -6,7 +6,12 @@ Streamlit UI(app.py)가 호출하는 데이터 계층. UI 없이 단독 테스�
 """
 from __future__ import annotations
 
+import hashlib
+import os
+import pathlib
+import shutil
 import sqlite3
+import tempfile
 from typing import Dict, List, Optional, Set, Tuple
 
 import pandas as pd
@@ -38,8 +43,39 @@ def tier_from_code(material: str) -> str:
 
 
 # ----------------------------------------------------------------------
-# DB 로딩
+# DB 로딩 (공유폴더/OneDrive 안전: 읽기전용 연결 + 로컬 스냅샷)
 # ----------------------------------------------------------------------
+def snapshot_warehouse(src_path: str) -> str:
+    """공유폴더(SharePoint/Teams·OneDrive 동기화) 상의 warehouse 를 로컬 임시로 복사해 경로 반환.
+
+    원본을 직접 열면 SQLite 잠금/‑wal 생성으로 동기화 충돌이 날 수 있어, 읽기 전용 조회는
+    로컬 복사본에서 하는 게 안전하다. 원본 (경로+mtime+크기) 기준으로 캐시해 바뀌지 않았으면
+    재복사하지 않는다. 복사 실패(권한 등) 시 원본 경로를 그대로 돌려준다.
+    """
+    try:
+        src = os.path.abspath(src_path)
+        stt = os.stat(src)
+        key = hashlib.md5(f"{src}|{int(stt.st_mtime)}|{stt.st_size}".encode()).hexdigest()[:12]
+        dst = os.path.join(tempfile.gettempdir(), f"genealogy_wh_{key}.sqlite")
+        if not os.path.exists(dst) or os.path.getsize(dst) != stt.st_size:
+            shutil.copy2(src, dst)
+        return dst
+    except OSError:
+        return src_path
+
+
+def _connect(db_path: str) -> sqlite3.Connection:
+    """읽기 전용(read-only)으로 SQLite 연결. 공유 파일에 ‑wal/잠금 파일을 만들지 않는다.
+
+    경로에 공백·한글이 있어도 되도록 file URI 로 변환한다. URI 연결 실패 시 일반 연결로 폴백.
+    """
+    try:
+        uri = pathlib.Path(os.path.abspath(db_path)).as_uri() + "?mode=ro"
+        return sqlite3.connect(uri, uri=True)
+    except (sqlite3.OperationalError, ValueError):
+        return sqlite3.connect(db_path)
+
+
 def _table_exists(con, name: str) -> bool:
     return con.execute(
         "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name=?", (name,)
@@ -47,7 +83,7 @@ def _table_exists(con, name: str) -> bool:
 
 
 def load_edges(db_path: str, run_id: Optional[str] = None) -> pd.DataFrame:
-    con = sqlite3.connect(db_path)
+    con = _connect(db_path)
     try:
         if run_id:
             return pd.read_sql_query("SELECT * FROM gen_edges WHERE run_id=?", con, params=[run_id])
@@ -57,7 +93,7 @@ def load_edges(db_path: str, run_id: Optional[str] = None) -> pd.DataFrame:
 
 
 def load_nodes(db_path: str, run_id: Optional[str] = None) -> pd.DataFrame:
-    con = sqlite3.connect(db_path)
+    con = _connect(db_path)
     try:
         if run_id:
             return pd.read_sql_query("SELECT * FROM gen_nodes WHERE run_id=?", con, params=[run_id])
@@ -67,7 +103,7 @@ def load_nodes(db_path: str, run_id: Optional[str] = None) -> pd.DataFrame:
 
 
 def load_runs(db_path: str) -> pd.DataFrame:
-    con = sqlite3.connect(db_path)
+    con = _connect(db_path)
     try:
         if not _table_exists(con, "build_runs"):
             return pd.DataFrame()
@@ -77,7 +113,7 @@ def load_runs(db_path: str) -> pd.DataFrame:
 
 
 def load_ingest_log(db_path: str) -> pd.DataFrame:
-    con = sqlite3.connect(db_path)
+    con = _connect(db_path)
     try:
         if not _table_exists(con, "ingest_log"):
             return pd.DataFrame()
@@ -87,7 +123,7 @@ def load_ingest_log(db_path: str) -> pd.DataFrame:
 
 
 def load_bom_expected(db_path: str, run_id: Optional[str] = None) -> pd.DataFrame:
-    con = sqlite3.connect(db_path)
+    con = _connect(db_path)
     try:
         view = "v_latest_bom_expected"
         if run_id:
@@ -101,7 +137,7 @@ def load_bom_expected(db_path: str, run_id: Optional[str] = None) -> pd.DataFram
 
 def load_legacy_map(db_path: str, run_id: Optional[str] = None) -> Dict[str, str]:
     """legacy_code → current_code 매핑 (없으면 빈 dict)."""
-    con = sqlite3.connect(db_path)
+    con = _connect(db_path)
     try:
         if run_id and _table_exists(con, "gen_legacy_map"):
             df = pd.read_sql_query("SELECT legacy_code, current_code FROM gen_legacy_map WHERE run_id=?",
@@ -117,7 +153,7 @@ def load_legacy_map(db_path: str, run_id: Optional[str] = None) -> Dict[str, str
 
 def load_plant_map(db_path: str) -> Dict[str, str]:
     """plant_code → plant_name 매핑 (없으면 빈 dict)."""
-    con = sqlite3.connect(db_path)
+    con = _connect(db_path)
     try:
         if not _table_exists(con, "gen_plant_map"):
             return {}

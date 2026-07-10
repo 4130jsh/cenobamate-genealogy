@@ -1,0 +1,11 @@
+# 이 파일을 warehouse_path.txt 로 복사한 뒤, 아래에 공유 warehouse.sqlite 의
+# '로컬(동기화된) 경로'를 한 줄로 적으세요. (# 로 시작하는 줄은 무시)
+#
+# SharePoint/Teams 문서 라이브러리를 OneDrive 로 동기화하면 아래처럼 로컬 경로가 생깁니다.
+# (경로에 공백·한글이 있어도 됩니다. 따옴표는 넣지 마세요.)
+#
+# 예시(각자 환경에 맞게 수정):
+# C:\Users\bp10872\SK biopharmaceuticals\CMO Genealogy - Documents\warehouse.sqlite
+#
+# 실제 경로 한 줄 ↓
+C:\Users\<사번>\<조직>\<사이트> - <라이브러리>\warehouse.sqlite
