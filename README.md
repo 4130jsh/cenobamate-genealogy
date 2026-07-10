@@ -48,8 +48,9 @@ python src/genealogy_tool.py \
 2. **뷰어 PC** (conda 불필요, Python 만 있으면 됨):
    - 이 리포를 클론 (패키지는 `view_genealogy.bat` 이 없으면 자동 설치)
    - 공유 라이브러리를 OneDrive 로 **동기화**(또는 "바로가기 추가") → 로컬 경로 생김
-   - `warehouse_path.txt.example` → `warehouse_path.txt` 로 복사 후 그 로컬 경로 한 줄 기입
-     (또는 환경변수 `GENEALOGY_WAREHOUSE` 지정)
+   - 리포 루트에 `warehouse_path.txt` 파일을 만들고 그 **로컬 경로 한 줄**만 적음
+     (예: `C:\Users\<사번>\OneDrive - skbpcorp\CPM team - Batch Genealogy\warehouse.sqlite`).
+     또는 환경변수 `GENEALOGY_WAREHOUSE` 지정, 또는 실행 후 사이드바에 직접 입력해도 됨.
    - **`view_genealogy.bat` 더블클릭** → 조회 전용 실행 (적재/재빌드 안 함)
 3. 빌더가 warehouse 를 갱신하면, 뷰어는 사이드바 **🔄 최신 데이터 다시 읽기** 로 반영.
 
